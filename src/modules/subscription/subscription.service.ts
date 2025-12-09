@@ -43,6 +43,32 @@ export const createCheckoutSession = async (data: CheckoutData, successUrl: stri
   const { email, firstName, lastName, phone } = data;
 
   try {
+    let user;
+    const existingUser = await User.findOne({ email });
+    
+    if (existingUser) {
+      const existingSubscription = await Subscription.findOne({ email, status: "active" });
+      if (existingSubscription) {
+        throw new Error("You already have an active subscription");
+      }
+      existingUser.name = `${firstName} ${lastName}`;
+      existingUser.status = "inactive";
+      existingUser.activity = new Date();
+      await existingUser.save();
+      user = existingUser;
+    } else {
+      const tempPassword = generatePassword();
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+      user = await User.create({
+        email,
+        password: hashedPassword,
+        name: `${firstName} ${lastName}`,
+        role: "user",
+        status: "inactive",
+        activity: new Date()
+      });
+    }
+
     const session = await stripe.checkout.sessions.create({
       customer_email: email,
       payment_method_types: ["card"],
@@ -120,34 +146,32 @@ const processSubscription = async (session: Stripe.Checkout.Session) => {
     }
   }
 
-  const existingSubscription = await Subscription.findOne({ email, status: "active" });
-  if (existingSubscription) {
+  const user = await User.findOne({ email });
+  if (!user) {
+    console.error(`User not found for email: ${email}`);
+    throw new Error("User not found");
+  }
+
+  const existingActiveSubscription = await Subscription.findOne({ email, status: "active" });
+  if (existingActiveSubscription) {
+    console.log(`User ${email} already has an active subscription: ${existingActiveSubscription._id}`);
     throw new Error("User already has an active subscription");
   }
 
   const password = generatePassword();
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  let user;
-  const existingUser = await User.findOne({ email });
-  if (existingUser) {
-    if (existingUser.status === "Blocked") {
-      throw new Error("Account is blocked. Cannot create subscription");
-    }
-    existingUser.password = hashedPassword;
-    existingUser.name = `${firstName} ${lastName}`;
-    existingUser.activity = new Date();
-    await existingUser.save();
-    user = existingUser;
-  } else {
-    user = await User.create({
-      email,
-      password: hashedPassword,
-      name: `${firstName} ${lastName}`,
-      role: "user",
-      status: "Active",
-      activity: new Date()
-    });
+  console.log(`Updating user ${email} from status ${user.status} to Active`);
+  try {
+    user.password = hashedPassword;
+    user.status = "Active";
+    user.activity = new Date();
+    const savedUser = await user.save();
+    console.log(`User ${email} updated successfully. New status: ${savedUser.status}, User ID: ${savedUser._id}`);
+  } catch (saveError: any) {
+    console.error(`Failed to save user ${email}:`, saveError);
+    console.error(`Save error details:`, saveError.message);
+    throw new Error(`Failed to update user: ${saveError.message}`);
   }
 
   let customerId = "";
@@ -172,18 +196,32 @@ const processSubscription = async (session: Stripe.Checkout.Session) => {
     }
   }
 
-  await Subscription.create({
-    email,
-    firstName,
-    lastName,
-    phone,
-    userId: user._id.toString(),
-    stripeCustomerId: customerId,
-    stripeSubscriptionId: paymentIntentId || session.id,
-    stripePriceId: priceId || "one-time-payment",
-    status: "active",
-    currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
-  });
+  const existingSubscription = await Subscription.findOne({ email });
+  if (existingSubscription) {
+    existingSubscription.firstName = firstName;
+    existingSubscription.lastName = lastName;
+    existingSubscription.phone = phone;
+    existingSubscription.userId = user._id.toString();
+    existingSubscription.stripeCustomerId = customerId;
+    existingSubscription.stripeSubscriptionId = paymentIntentId || session.id;
+    existingSubscription.stripePriceId = priceId || "one-time-payment";
+    existingSubscription.status = "active";
+    existingSubscription.currentPeriodEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    await existingSubscription.save();
+  } else {
+    await Subscription.create({
+      email,
+      firstName,
+      lastName,
+      phone,
+      userId: user._id.toString(),
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: paymentIntentId || session.id,
+      stripePriceId: priceId || "one-time-payment",
+      status: "active",
+      currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+    });
+  }
 
   await sendSubscriptionEmail(email, firstName, lastName, password);
 
@@ -197,13 +235,26 @@ const processSubscription = async (session: Stripe.Checkout.Session) => {
 
 export const handleWebhookEvent = async (event: Stripe.Event) => {
   try {
+    console.log(`Webhook event received: ${event.type}`);
+    
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
       
-      if (session.mode === "payment" && session.payment_status === "paid") {
-        const result = await processSubscription(session);
-        console.log(`Webhook processed: ${result.message} for ${result.email}`);
-        return result;
+      console.log(`Checkout session completed - ID: ${session.id}, Mode: ${session.mode}, Payment Status: ${session.payment_status}`);
+      
+      if (session.mode === "payment") {
+        if (session.payment_status === "paid") {
+          const expandedSession = await stripe.checkout.sessions.retrieve(session.id, {
+            expand: ['payment_intent', 'line_items']
+          });
+          
+          const result = await processSubscription(expandedSession);
+          console.log(`Webhook processed successfully: ${result.message} for ${result.email}`);
+          return result;
+        } else {
+          console.log(`Payment not completed for session ${session.id}. Status: ${session.payment_status}`);
+          return { success: true, message: "Payment not completed, user remains blocked" };
+        }
       }
     }
 
@@ -215,31 +266,12 @@ export const handleWebhookEvent = async (event: Stripe.Event) => {
     if (event.type === "payment_intent.payment_failed") {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       console.log(`Payment intent failed: ${paymentIntent.id}`);
-      throw new Error(`Payment failed: ${paymentIntent.last_payment_error?.message || "Unknown error"}`);
     }
 
     return { success: true, message: "Event processed" };
   } catch (error: any) {
     console.error("Webhook processing error:", error);
+    console.error("Error stack:", error.stack);
     throw new Error(error?.message || "Failed to process webhook event");
-  }
-};
-
-export const handleCheckoutSuccess = async (sessionId: string) => {
-  try {
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    
-    if (session.payment_status !== "paid") {
-      throw new Error("Payment not completed");
-    }
-
-    const result = await processSubscription(session);
-
-    return {
-      success: true,
-      message: "Payment verified successfully"
-    };
-  } catch (error: any) {
-    throw new Error(error?.message || "Failed to process subscription");
   }
 };

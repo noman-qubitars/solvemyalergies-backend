@@ -93,8 +93,10 @@ const getLatestUnusedOtp = async (userId: string) => {
 export const signin = async (payload: { email: string; password: string }) => {
   const user = await User.findOne({ email: payload.email });
   
-  if (user && user.status === "Blocked") {
-    throw new Error("Your account has been blocked. Please contact support");
+  if (user && (user.status === "Blocked" || user.status === "inactive")) {
+    throw new Error(user.status === "inactive" 
+      ? "Your account is not verified. Please complete your subscription to activate your account"
+      : "Your account has been blocked. Please contact support");
   }
   
   if (!user) {

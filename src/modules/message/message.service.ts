@@ -18,8 +18,6 @@ export interface CreateMessageData {
 export interface GetMessagesParams {
   userId?: string;
   isRead?: boolean;
-  page?: number;
-  limit?: number;
 }
 
 export const createMessage = async (data: CreateMessageData) => {
@@ -40,7 +38,7 @@ export const createMessage = async (data: CreateMessageData) => {
 };
 
 export const getMessages = async (params: GetMessagesParams) => {
-  const { userId, isRead, page = 1, limit = 50 } = params;
+  const { userId, isRead } = params;
 
   const query: any = {};
 
@@ -53,23 +51,13 @@ export const getMessages = async (params: GetMessagesParams) => {
     query.isRead = isRead;
   }
 
-  const skip = (page - 1) * limit;
-
   const messages = await Message.find(query)
     .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
     .lean();
-
-  const total = await Message.countDocuments(query);
 
   return {
     success: true,
     data: messages,
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
   };
 };
 

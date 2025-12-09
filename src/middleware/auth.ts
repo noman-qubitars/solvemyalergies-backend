@@ -43,10 +43,12 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
         });
       }
 
-      if (user.status === "Blocked") {
+      if (user.status === "Blocked" || user.status === "inactive") {
         return res.status(403).json({
           success: false,
-          message: "Your account has been blocked. Please contact support"
+          message: user.status === "inactive" 
+            ? "Your account is not verified. Please complete your subscription to activate your account"
+            : "Your account has been blocked. Please contact support"
         });
       }
       

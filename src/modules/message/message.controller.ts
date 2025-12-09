@@ -86,7 +86,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
 
 export const getAllMessages = async (req: AuthRequest, res: Response) => {
   try {
-    const { userId, isRead, page, limit } = req.query;
+    const { userId, isRead } = req.query;
     const isAdmin = req.userRole === "admin";
 
     const params: any = {};
@@ -98,8 +98,6 @@ export const getAllMessages = async (req: AuthRequest, res: Response) => {
     }
     
     if (isRead !== undefined) params.isRead = isRead === "true";
-    if (page) params.page = parseInt(page as string, 10);
-    if (limit) params.limit = parseInt(limit as string, 10);
 
     const result = await getMessages(params);
     res.status(200).json(result);

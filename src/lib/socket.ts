@@ -33,8 +33,10 @@ export const initializeSocket = (httpServer: HttpServer) => {
         return next(new Error("User not found"));
       }
 
-      if (user.status === "Blocked") {
-        return next(new Error("Your account has been blocked"));
+      if (user.status === "Blocked" || user.status === "inactive") {
+        return next(new Error(user.status === "inactive" 
+          ? "Your account is not verified. Please complete your subscription"
+          : "Your account has been blocked"));
       }
 
       socket.userId = decoded.sub;

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import Stripe from "stripe";
 import { config } from "../../config/env";
-import { createCheckoutSession, handleCheckoutSuccess, handleWebhookEvent } from "./subscription.service";
+import { createCheckoutSession, handleWebhookEvent } from "./subscription.service";
 import { Subscription } from "../../models/Subscription";
 
 const stripe = new Stripe(config.stripe.secretKey, {
@@ -29,7 +29,7 @@ export const createCheckout = async (req: Request, res: Response) => {
     }
 
     const frontendUrl = process.env.FRONTEND_URL || req.headers.origin || "http://localhost:3000";
-    const successUrl = `${frontendUrl}/webinar/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`;
+    const successUrl = `${frontendUrl}/webinar/subscription?payment=success`;
     const cancelUrl = `${frontendUrl}/webinar/subscription?canceled=true`;
 
     const result = await createCheckoutSession(
@@ -43,28 +43,6 @@ export const createCheckout = async (req: Request, res: Response) => {
     res.status(400).json({
       success: false,
       message: error.message || "Failed to create checkout session"
-    });
-  }
-};
-
-export const verifyPayment = async (req: Request, res: Response) => {
-  try {
-    const { sessionId } = req.body;
-
-    if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        message: "Session ID is required"
-      });
-    }
-
-    const result = await handleCheckoutSuccess(sessionId);
-
-    res.status(200).json(result);
-  } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      message: error.message || "Payment verification failed"
     });
   }
 };
@@ -107,9 +85,8 @@ export const handleWebhook = async (req: Request, res: Response) => {
     res.status(200).json({ received: true });
   } catch (error: any) {
     console.error("Webhook processing error:", error);
-    res.status(400).json({
-      success: false,
-      message: error.message || "Webhook processing failed"
-    });
+    console.error("Event type:", event.type);
+    console.error("Event ID:", event.id);
+    res.status(200).json({ received: true, error: error.message });
   }
 };
