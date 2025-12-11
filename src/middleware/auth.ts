@@ -101,7 +101,7 @@ export const requireNotRole = (...excludedRoles: string[]) => {
         const roleNames = excludedRoles.join(" or ");
         return res.status(403).json({
           success: false,
-          message: `Access denied. This endpoint is not available for ${roleNames}`
+          message: `This endpoint is only available for users. ${roleNames.charAt(0).toUpperCase() + roleNames.slice(1)} access is not permitted.`
         });
       }
       next();

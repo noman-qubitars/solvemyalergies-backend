@@ -110,12 +110,14 @@ export const signin = async (payload: { email: string; password: string }) => {
     const hashedPassword = await bcrypt.hash(payload.password, 10);
     
     const userName = `${subscription.firstName} ${subscription.lastName}`.trim() || payload.email.split("@")[0];
+    const defaultImage = "/uploads/images/avatar.png";
     const createdUser = await User.findOneAndUpdate(
       { email: payload.email },
       {
         email: payload.email,
         password: hashedPassword,
         name: userName,
+        image: defaultImage,
         status: "Active",
         activity: new Date(),
         role: "user"
@@ -130,6 +132,7 @@ export const signin = async (payload: { email: string; password: string }) => {
       userId: userId,
       email: payload.email,
       name: userName,
+      image: createdUser.image,
       role: "user"
     };
   }
@@ -145,6 +148,7 @@ export const signin = async (payload: { email: string; password: string }) => {
   const userId = user._id.toString();
   const userRole = user.role || "user";
   const userName = user.name || payload.email.split("@")[0];
+  const userImage = user.image || "/uploads/images/avatar.png";
   
   return { 
     success: true,
@@ -152,6 +156,7 @@ export const signin = async (payload: { email: string; password: string }) => {
     userId: userId,
     email: payload.email,
     name: userName,
+    image: userImage,
     role: userRole
   };
 };

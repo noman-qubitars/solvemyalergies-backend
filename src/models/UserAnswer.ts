@@ -9,6 +9,8 @@ export interface AnswerItem {
 export interface IUserAnswer extends Document {
   userId: string;
   answers: AnswerItem[];
+  photo?: string;
+  file?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +25,8 @@ const UserAnswerSchema = new Schema<IUserAnswer>(
   {
     userId: { type: String, required: true, unique: true },
     answers: { type: [AnswerItemSchema], default: [] },
+    photo: { type: String },
+    file: { type: String },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
   },

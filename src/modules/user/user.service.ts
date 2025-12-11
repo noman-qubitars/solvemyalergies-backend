@@ -6,9 +6,10 @@ export interface UserWithSubscription {
   name: string;
   email: string;
   phone: string;
+  image?: string;
   joinedDate: Date;
   activity: Date;
-  status: "Active" | "Blocked";
+  status: "Active" | "Blocked" | "inactive";
   role: "user" | "admin";
 }
 
@@ -25,6 +26,7 @@ export const getUserById = async (userId: string): Promise<UserWithSubscription>
     name: user.name || `${subscription?.firstName || ""} ${subscription?.lastName || ""}`.trim() || user.email.split("@")[0],
     email: user.email,
     phone: subscription?.phone || "N/A",
+    image: user.image || "/uploads/images/avatar.png",
     joinedDate: user.createdAt,
     activity: user.activity,
     status: user.status || "Active",
@@ -53,6 +55,7 @@ export const getAllUsers = async (): Promise<UserWithSubscription[]> => {
       name: user.name || `${subscription?.firstName || ""} ${subscription?.lastName || ""}`.trim() || user.email.split("@")[0],
       email: user.email,
       phone: subscription?.phone || "N/A",
+      image: user.image || "/uploads/images/avatar.png",
       joinedDate: user.createdAt,
       activity: user.activity,
       status: user.status || "Active",

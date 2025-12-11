@@ -194,6 +194,87 @@ export const updateAnswer = [
   }
 ];
 
+export const patchAnswer = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.query;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User ID not found in token"
+      });
+    }
+
+    if (!id || typeof id !== 'string' || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Incorrect id"
+      });
+    }
+
+    const userAnswer = await UserAnswer.findById(id);
+    if (!userAnswer) {
+      return res.status(404).json({
+        success: false,
+        message: "Incorrect id"
+      });
+    }
+
+    if (userAnswer.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only update your own answers"
+      });
+    }
+
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    
+    if (!files || !files.photo || files.photo.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Photo is required"
+      });
+    }
+
+    // Update photo if provided (multiple images allowed)
+    if (files.photo && files.photo.length > 0) {
+      const photoPaths = files.photo.map(photoFile => `/uploads/images/${photoFile.filename}`);
+      userAnswer.photo = JSON.stringify(photoPaths);
+    }
+
+    // Update file if provided (multiple PDFs/documents allowed)
+    if (files.file && files.file.length > 0) {
+      const filePaths = files.file.map(file => {
+        const fileSubfolder = file.mimetype === 'application/pdf' ? 'pdfs' : 'documents';
+        return `/uploads/${fileSubfolder}/${file.filename}`;
+      });
+      userAnswer.file = JSON.stringify(filePaths);
+    }
+
+    await userAnswer.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Answer updated successfully",
+      data: {
+        id: userAnswer._id,
+        userId: userAnswer.userId,
+        answers: userAnswer.answers,
+        photo: userAnswer.photo,
+        file: userAnswer.file,
+        createdAt: userAnswer.createdAt,
+        updatedAt: userAnswer.updatedAt
+      }
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error"
+    });
+  }
+};
+
 export const getQuestionsWithAnswers = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
