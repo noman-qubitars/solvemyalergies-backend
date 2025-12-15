@@ -6,6 +6,32 @@ import { validate } from "../../lib/validation/validateRequest";
 import { answerSchema, updateAnswerSchema } from "./quiz.schemas";
 import { AuthRequest } from "../../middleware/auth";
 
+const getQuestionNumber = (questionId: string): number | null => {
+  const match = questionId.match(/question_(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
+const validateSequentialQuestion = (questionId: string, existingAnswers: Array<{ questionId: string }>): { valid: boolean; missingQuestion?: number } => {
+  const currentQuestionNum = getQuestionNumber(questionId);
+  if (currentQuestionNum === null) {
+    return { valid: true };
+  }
+
+  if (currentQuestionNum <= 2) {
+    return { valid: true };
+  }
+
+  const answeredQuestionNums = existingAnswers
+    .map(ans => getQuestionNumber(ans.questionId))
+    .filter((num): num is number => num !== null);
+
+  if (!answeredQuestionNums.includes(2)) {
+    return { valid: false, missingQuestion: 2 };
+  }
+
+  return { valid: true };
+};
+
 export const submitAnswer = [
   validate(answerSchema),
   async (req: AuthRequest, res: Response) => {
@@ -47,6 +73,14 @@ export const submitAnswer = [
       let userAnswer = await UserAnswer.findOne({ userId });
 
       if (!userAnswer) {
+        const currentQuestionNum = getQuestionNumber(questionId);
+        if (currentQuestionNum !== null && currentQuestionNum !== 1) {
+          return res.status(400).json({
+            success: false,
+            message: `You must answer question_${currentQuestionNum - 1} first before answering ${questionId}`
+          });
+        }
+
         userAnswer = await UserAnswer.create({
           userId,
           answers: [{
@@ -64,6 +98,14 @@ export const submitAnswer = [
           return res.status(400).json({
             success: false,
             message: "You already save answer for this question."
+          });
+        }
+
+        const validation = validateSequentialQuestion(questionId, userAnswer.answers);
+        if (!validation.valid && validation.missingQuestion) {
+          return res.status(400).json({
+            success: false,
+            message: `You must answer question_${validation.missingQuestion} first before answering ${questionId}`
           });
         }
 
@@ -165,6 +207,14 @@ export const updateAnswer = [
         userAnswer.answers[existingAnswerIndex].selectedOption = selectedOption;
         userAnswer.answers[existingAnswerIndex].questionType = questionType;
       } else {
+        const validation = validateSequentialQuestion(questionId, userAnswer.answers);
+        if (!validation.valid && validation.missingQuestion) {
+          return res.status(400).json({
+            success: false,
+            message: `You must answer question_${validation.missingQuestion} first before answering ${questionId}`
+          });
+        }
+
         userAnswer.answers.push({
           questionId,
           questionType,

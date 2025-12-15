@@ -1,4 +1,9 @@
-import { DailySession } from "../../models/DailySession";
+import {
+  createDailySessionModel,
+  findDailySessionByUserAndDate,
+  findDailySessionByUserAndDateLean,
+  findDailySessions,
+} from "../../models/DailySession";
 import { DailySessionQuestion } from "../../models/DailySessionQuestion";
 
 export interface CreateDailySessionData {
@@ -28,16 +33,13 @@ export const createDailySession = async (data: CreateDailySessionData) => {
 
   const sessionDate = parseDateToUTC(date);
 
-  const existingSession = await DailySession.findOne({
-    userId,
-    date: sessionDate,
-  });
+  const existingSession = await findDailySessionByUserAndDate(userId, sessionDate);
 
   if (existingSession) {
     throw new Error("You have already submitted a session for this date. Each day allows only one session.");
   }
 
-  const session = await DailySession.create({
+  const session = await createDailySessionModel({
     userId,
     date: sessionDate,
     answers,
@@ -72,9 +74,7 @@ export const getDailySessions = async (params: GetDailySessionsParams) => {
     }
   }
 
-  const sessions = await DailySession.find(query)
-    .sort({ date: -1 })
-    .lean();
+  const sessions = await findDailySessions(query);
 
   const allQuestionIds = new Set<string>();
   sessions.forEach((session: any) => {
@@ -109,10 +109,7 @@ export const getDailySessions = async (params: GetDailySessionsParams) => {
 export const getDailySessionByDate = async (userId: string, date: Date) => {
   const sessionDate = parseDateToUTC(date);
 
-  const session = await DailySession.findOne({
-    userId,
-    date: sessionDate,
-  }).lean();
+  const session = await findDailySessionByUserAndDateLean(userId, sessionDate);
 
   if (!session) {
     return null;

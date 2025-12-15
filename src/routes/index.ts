@@ -1,0 +1,22 @@
+import { Express } from "express";
+import { authRouter } from "../modules/auth/auth.routes";
+import { subscriptionRouter } from "../modules/subscription/subscription.routes";
+import { quizRouter } from "../modules/quiz/quiz.routes";
+import { userRouter } from "../modules/user/user.routes";
+import { dailySessionRouter } from "../modules/dailySession/dailySession.routes";
+import { messageRouter } from "../modules/message/message.routes";
+import { educationalVideoRouter } from "../modules/educationalVideo/educationalVideo.routes";
+import { profileRouter } from "../modules/profile/profile.routes";
+import { sessionVideoRouter } from "../modules/sessionVideo/sessionVideo.routes";
+
+export const registerRoutes = (app: Express) => {
+  app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/subscription", subscriptionRouter);
+  app.use("/api/v1/quiz", quizRouter);
+  app.use("/api/v1/users", userRouter);
+  app.use("/api/v1/daily-session", dailySessionRouter);
+  app.use("/api/v1/messages", messageRouter);
+  app.use("/api/v1/educational-videos", educationalVideoRouter);
+  app.use("/api/v1/session-videos", sessionVideoRouter);
+  app.use("/api/v1/profile", profileRouter);
+};

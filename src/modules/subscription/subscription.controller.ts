@@ -1,36 +1,49 @@
 import { Request, Response } from "express";
 import Stripe from "stripe";
 import { config } from "../../config/env";
-import { createCheckoutSession, handleWebhookEvent } from "./subscription.service";
-import { Subscription } from "../../models/Subscription";
+import {
+  createCheckoutSession,
+  handleWebhookEvent,
+} from "./subscription.service";
+import { findActiveSubscriptionByEmail } from "../../models/Subscription";
+import {
+  handleControllerError,
+  sendMissingFieldsError,
+  sendActiveSubscriptionExistsError,
+  sendMissingStripeSignatureError,
+  sendWebhookSecretNotConfiguredError,
+  sendWebhookSignatureVerificationError,
+} from "./helpers/subscription.controller.errors";
+import {
+  validateCheckoutFields,
+  getFrontendUrl,
+  buildSuccessUrl,
+  buildCancelUrl,
+} from "./helpers/subscription.controller.utils";
 
 const stripe = new Stripe(config.stripe.secretKey, {
   apiVersion: "2025-11-17.clover",
-  typescript: true
+  typescript: true,
 });
 
 export const createCheckout = async (req: Request, res: Response) => {
   try {
+    const validation = validateCheckoutFields(req.body);
+    
+    if (!validation.valid) {
+      return sendMissingFieldsError(res);
+    }
+
     const { email, firstName, lastName, phone } = req.body;
 
-    if (!email || !firstName || !lastName || !phone) {
-      return res.status(400).json({
-        success: false,
-        message: "All fields are required"
-      });
-    }
-
-    const existingSubscription = await Subscription.findOne({ email, status: "active" });
+    const existingSubscription = await findActiveSubscriptionByEmail(email);
     if (existingSubscription) {
-      return res.status(400).json({
-        success: false,
-        message: "You already have an active subscription"
-      });
+      return sendActiveSubscriptionExistsError(res);
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || req.headers.origin || "http://localhost:3000";
-    const successUrl = `${frontendUrl}/webinar/subscription?payment=success`;
-    const cancelUrl = `${frontendUrl}/webinar/subscription?canceled=true`;
+    const frontendUrl = getFrontendUrl(req);
+    const successUrl = buildSuccessUrl(frontendUrl);
+    const cancelUrl = buildCancelUrl(frontendUrl);
 
     const result = await createCheckoutSession(
       { email, firstName, lastName, phone },
@@ -40,10 +53,7 @@ export const createCheckout = async (req: Request, res: Response) => {
 
     res.status(200).json(result);
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      message: error.message || "Failed to create checkout session"
-    });
+    return handleControllerError(error, res, "Failed to create checkout session");
   }
 };
 
@@ -51,17 +61,11 @@ export const handleWebhook = async (req: Request, res: Response) => {
   const sig = req.headers["stripe-signature"];
 
   if (!sig) {
-    return res.status(400).json({
-      success: false,
-      message: "Missing stripe-signature header"
-    });
+    return sendMissingStripeSignatureError(res);
   }
 
   if (!config.stripe.webhookSecret) {
-    return res.status(500).json({
-      success: false,
-      message: "Webhook secret not configured"
-    });
+    return sendWebhookSecretNotConfiguredError(res);
   }
 
   let event: Stripe.Event;
@@ -74,10 +78,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
     );
   } catch (err: any) {
     console.error("Webhook signature verification failed:", err.message);
-    return res.status(400).json({
-      success: false,
-      message: `Webhook signature verification failed: ${err.message}`
-    });
+    return sendWebhookSignatureVerificationError(res, err.message);
   }
 
   try {

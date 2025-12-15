@@ -1,34 +1,45 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Document } from "mongoose";
+import { SubscriptionSchema, ISubscription } from "../schemas/Subscription.schema";
 
-export interface ISubscription extends Document {
-  email: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  userId: string;
-  stripeCustomerId: string;
-  stripeSubscriptionId: string;
-  stripePriceId: string;
-  status: "active" | "canceled" | "incomplete" | "past_due";
-  currentPeriodEnd: Date;
-  createdAt: Date;
-}
+export interface ISubscriptionDocument extends ISubscription, Document {}
 
-const SubscriptionSchema = new Schema<ISubscription>(
-  {
-    email: { type: String, required: true, unique: true },
-    firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
-    phone: { type: String, required: true },
-    userId: { type: String, required: true },
-    stripeCustomerId: { type: String, required: true },
-    stripeSubscriptionId: { type: String, required: true },
-    stripePriceId: { type: String, required: true },
-    status: { type: String, required: true },
-    currentPeriodEnd: { type: Date },
-    createdAt: { type: Date, default: Date.now }
-  },
-  { collection: "subscriptions" }
-);
+export const SubscriptionModel = mongoose.model<ISubscriptionDocument>("Subscription", SubscriptionSchema);
 
-export const Subscription = mongoose.model<ISubscription>("Subscription", SubscriptionSchema);
+export { SubscriptionModel as Subscription };
+export { ISubscription, SubscriptionSchema };
+
+export const findSubscriptionByEmail = async (email: string) => {
+  return await SubscriptionModel.findOne({ email });
+};
+
+export const findActiveSubscriptionByEmail = async (email: string) => {
+  return await SubscriptionModel.findOne({ email, status: "active" });
+};
+
+export const findAllSubscriptions = async () => {
+  return await SubscriptionModel.find().sort({ createdAt: -1 });
+};
+
+export const findSubscriptionById = async (subscriptionId: string) => {
+  return await SubscriptionModel.findById(subscriptionId);
+};
+
+export const createSubscription = async (subscriptionData: Partial<ISubscription>) => {
+  return await SubscriptionModel.create(subscriptionData);
+};
+
+export const updateSubscriptionByEmail = async (email: string, updateData: Partial<ISubscription>) => {
+  return await SubscriptionModel.findOneAndUpdate(
+    { email },
+    updateData,
+    { new: true }
+  );
+};
+
+export const updateSubscriptionById = async (subscriptionId: string, updateData: Partial<ISubscription>) => {
+  return await SubscriptionModel.findByIdAndUpdate(
+    subscriptionId,
+    updateData,
+    { new: true }
+  );
+};

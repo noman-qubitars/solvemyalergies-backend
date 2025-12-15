@@ -7,29 +7,36 @@ import {
   deleteEducationalVideo,
 } from "./educationalVideo.service";
 import { AuthRequest } from "../../middleware/auth";
-import fs from "fs";
-import path from "path";
+import {
+  sendTitleRequiredError,
+  sendVideoFileRequiredError,
+  sendInvalidPageNumberError,
+  sendInvalidPageSizeError,
+  sendVideoNotFoundError,
+  handleEducationalVideoError,
+} from "./helpers/educationalVideo.controller.errors";
+import {
+  parseVideoStatus,
+  parsePaginationParams,
+  buildVideoUrl,
+  buildFilePath,
+  deleteFileIfExists,
+  buildUpdateData,
+} from "./helpers/educationalVideo.controller.utils";
 
 export const createVideo = async (req: AuthRequest, res: Response) => {
   try {
     const { title, description, status } = req.body;
 
     if (!title) {
-      return res.status(400).json({
-        success: false,
-        message: "Title is required",
-      });
+      return sendTitleRequiredError(res);
     }
 
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Video file is required",
-      });
+      return sendVideoFileRequiredError(res);
     }
 
-    const filePath = req.file.path.replace(/\\/g, "/");
-    const videoUrl = `/uploads/${filePath.split("uploads/")[1]}`;
+    const videoUrl = buildVideoUrl(req.file.path);
 
     const video = await createEducationalVideo({
       title,
@@ -38,7 +45,7 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
       fileName: req.file.originalname,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
-      status: status || "uploaded",
+      status: parseVideoStatus(status) || "uploaded",
     });
 
     res.status(201).json({
@@ -46,34 +53,38 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
       message: "Educational video created successfully",
       data: video,
     });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to create educational video",
-    });
+  } catch (error) {
+    return handleEducationalVideoError(res, error, "Failed to create educational video", 500);
   }
 };
 
 export const getVideos = async (req: AuthRequest, res: Response) => {
   try {
-    const { status } = req.query;
-    // Map "published" to "uploaded" for mobile app compatibility
-    let queryStatus: "uploaded" | "draft" | undefined = status as "uploaded" | "draft" | undefined;
-    if (status === "published") {
-      queryStatus = "uploaded";
+    const { status, page, pageSize } = req.query;
+
+    const queryStatus = parseVideoStatus(status as string | undefined);
+    const pagination = parsePaginationParams(page as string | undefined, pageSize as string | undefined);
+
+    if (pagination.error) {
+      if (pagination.error === "Invalid page number") {
+        return sendInvalidPageNumberError(res);
+      }
+      return sendInvalidPageSizeError(res);
     }
-    const videos = await getAllEducationalVideos(queryStatus);
+
+    const userId = req.userRole === "user" ? req.userId : undefined;
+    const result = await getAllEducationalVideos(queryStatus, pagination.page, pagination.pageSize, userId);
 
     res.status(200).json({
       success: true,
-      data: videos,
-      total: videos.length,
+      data: result.videos,
+      totalVideos: result.totalVideos,
+      currentPage: result.currentPage,
+      pageSize: result.pageSize,
+      totalPages: result.totalPages,
     });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to fetch educational videos",
-    });
+  } catch (error) {
+    return handleEducationalVideoError(res, error, "Failed to fetch educational videos", 500);
   }
 };
 
@@ -83,21 +94,15 @@ export const getVideoById = async (req: Request, res: Response) => {
     const video = await getEducationalVideoById(id);
 
     if (!video) {
-      return res.status(404).json({
-        success: false,
-        message: "Educational video not found",
-      });
+      return sendVideoNotFoundError(res);
     }
 
     res.status(200).json({
       success: true,
       data: video,
     });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to fetch educational video",
-    });
+  } catch (error) {
+    return handleEducationalVideoError(res, error, "Failed to fetch educational video", 500);
   }
 };
 
@@ -106,39 +111,19 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { title, description, status } = req.body;
 
-    const updateData: any = {};
-    if (title) updateData.title = title;
-    if (description !== undefined) updateData.description = description;
-    if (status) updateData.status = status;
-
     if (req.file) {
-      // Delete old file if exists
       const existingVideo = await getEducationalVideoById(id);
       if (existingVideo?.videoUrl) {
-        const oldFilePath = path.join(
-          process.cwd(),
-          "uploads",
-          existingVideo.videoUrl.replace("/uploads/", "")
-        );
-        if (fs.existsSync(oldFilePath)) {
-          fs.unlinkSync(oldFilePath);
-        }
+        const oldFilePath = buildFilePath(existingVideo.videoUrl);
+        deleteFileIfExists(oldFilePath);
       }
-
-      const filePath = req.file.path.replace(/\\/g, "/");
-      updateData.videoUrl = `/uploads/${filePath.split("uploads/")[1]}`;
-      updateData.fileName = req.file.originalname;
-      updateData.fileSize = req.file.size;
-      updateData.mimeType = req.file.mimetype;
     }
 
+    const updateData = buildUpdateData(title, description, status, req.file);
     const video = await updateEducationalVideo(id, updateData);
 
     if (!video) {
-      return res.status(404).json({
-        success: false,
-        message: "Educational video not found",
-      });
+      return sendVideoNotFoundError(res);
     }
 
     res.status(200).json({
@@ -146,11 +131,8 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
       message: "Educational video updated successfully",
       data: video,
     });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to update educational video",
-    });
+  } catch (error) {
+    return handleEducationalVideoError(res, error, "Failed to update educational video", 500);
   }
 };
 
@@ -160,22 +142,12 @@ export const deleteVideo = async (req: AuthRequest, res: Response) => {
 
     const video = await getEducationalVideoById(id);
     if (!video) {
-      return res.status(404).json({
-        success: false,
-        message: "Educational video not found",
-      });
+      return sendVideoNotFoundError(res);
     }
 
-    // Delete file from filesystem
     if (video.videoUrl) {
-      const filePath = path.join(
-        process.cwd(),
-        "uploads",
-        video.videoUrl.replace("/uploads/", "")
-      );
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+      const filePath = buildFilePath(video.videoUrl);
+      deleteFileIfExists(filePath);
     }
 
     await deleteEducationalVideo(id);
@@ -184,11 +156,7 @@ export const deleteVideo = async (req: AuthRequest, res: Response) => {
       success: true,
       message: "Educational video deleted successfully",
     });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to delete educational video",
-    });
+  } catch (error) {
+    return handleEducationalVideoError(res, error, "Failed to delete educational video", 500);
   }
 };
-

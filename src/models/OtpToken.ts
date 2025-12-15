@@ -1,26 +1,80 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Document } from "mongoose";
+import { OtpTokenSchema, IOtpToken } from "../schemas/OtpToken.schema";
 
-export interface IOtpToken extends Document {
+export interface IOtpTokenDocument extends IOtpToken, Document {}
+
+export const OtpTokenModel = mongoose.model<IOtpTokenDocument>("OtpToken", OtpTokenSchema);
+
+export { OtpTokenModel as OtpToken };
+export { IOtpToken, OtpTokenSchema };
+
+export const createOtpToken = async (otpData: {
   code: string;
   expiresAt: Date;
-  used: boolean;
-  verified: boolean;
-  verifiedAt?: Date;
   userId: string;
-  createdAt: Date;
-}
+}) => {
+  return await OtpTokenModel.create(otpData);
+};
 
-const OtpTokenSchema = new Schema<IOtpToken>(
-  {
-    code: { type: String, required: true },
-    expiresAt: { type: Date, required: true },
-    used: { type: Boolean, default: false },
-    verified: { type: Boolean, default: false },
-    verifiedAt: { type: Date },
-    userId: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now }
-  },
-  { collection: "otptokens" }
-);
+export const findOtpTokenById = async (otpId: string) => {
+  return await OtpTokenModel.findById(otpId);
+};
 
-export const OtpToken = mongoose.model<IOtpToken>("OtpToken", OtpTokenSchema);
+export const findLatestValidOtp = async (userId: string) => {
+  const now = new Date();
+  return await OtpTokenModel.findOne({
+    userId,
+    used: false,
+    expiresAt: { $gt: now }
+  }).sort({ createdAt: -1 });
+};
+
+export const findLatestUnexpiredOtp = async (userId: string) => {
+  return await OtpTokenModel.findOne({
+    userId,
+    used: false
+  }).sort({ createdAt: -1 });
+};
+
+export const findLatestVerifiedOtp = async (userId: string) => {
+  return await OtpTokenModel.findOne({
+    userId,
+    used: false,
+    verified: true
+  }).sort({ verifiedAt: -1 });
+};
+
+export const findLatestUnexpiredUnverifiedOtp = async (userId: string) => {
+  const now = new Date();
+  return await OtpTokenModel.findOne({
+    userId,
+    used: false,
+    expiresAt: { $gt: now }
+  }).sort({ createdAt: -1 });
+};
+
+export const updateOtpTokenById = async (otpId: string, updateData: Partial<IOtpToken>) => {
+  return await OtpTokenModel.findByIdAndUpdate(
+    otpId,
+    updateData,
+    { new: true }
+  );
+};
+
+export const markOtpAsVerified = async (otpId: string) => {
+  return await OtpTokenModel.updateOne(
+    { _id: otpId },
+    { verified: true, verifiedAt: new Date() }
+  );
+};
+
+export const markOtpAsUsed = async (otpId: string) => {
+  return await OtpTokenModel.updateOne(
+    { _id: otpId },
+    { used: true }
+  );
+};
+
+export const deleteOtpToken = async (otpId: string) => {
+  return await OtpTokenModel.findByIdAndDelete(otpId);
+};

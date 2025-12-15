@@ -1,5 +1,5 @@
-import { User } from "../../models/User";
-import { Subscription } from "../../models/Subscription";
+import { findUserByIdWithoutPassword, findAllUsers, updateUserActivity as updateUserActivityModel, toggleUserStatus as toggleUserStatusModel } from "../../models/User";
+import { findSubscriptionByEmail, findAllSubscriptions } from "../../models/Subscription";
 
 export interface UserWithSubscription {
   id: string;
@@ -14,12 +14,12 @@ export interface UserWithSubscription {
 }
 
 export const getUserById = async (userId: string): Promise<UserWithSubscription> => {
-  const user = await User.findById(userId).select("-password").lean();
+  const user = await findUserByIdWithoutPassword(userId);
   if (!user) {
     throw new Error("User not found");
   }
 
-  const subscription = await Subscription.findOne({ email: user.email }).lean();
+  const subscription = await findSubscriptionByEmail(user.email);
   
   return {
     id: user._id.toString(),
@@ -35,11 +35,9 @@ export const getUserById = async (userId: string): Promise<UserWithSubscription>
 };
 
 export const getAllUsers = async (): Promise<UserWithSubscription[]> => {
-  // Get all users
-  const users = await User.find().select("-password").sort({ createdAt: -1 });
+  const users = await findAllUsers();
 
-  // Get all subscriptions
-  const subscriptions = await Subscription.find();
+  const subscriptions = await findAllSubscriptions();
 
   // Create a map of email to subscription for quick lookup
   const subscriptionMap = new Map(
@@ -67,25 +65,12 @@ export const getAllUsers = async (): Promise<UserWithSubscription[]> => {
 };
 
 export const updateUserActivity = async (userId: string): Promise<void> => {
-  await User.findByIdAndUpdate(
-    userId,
-    { activity: new Date() },
-    { new: true }
-  );
+  await updateUserActivityModel(userId);
 };
 
 export const toggleUserStatus = async (
   userId: string
 ): Promise<{ status: "Active" | "Blocked" }> => {
-  const user = await User.findById(userId);
-  
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  user.status = user.status === "Active" ? "Blocked" : "Active";
-  user.activity = new Date();
-  await user.save();
-
-  return { status: user.status };
+  const user = await toggleUserStatusModel(userId);
+  return { status: user.status as "Active" | "Blocked" };
 };

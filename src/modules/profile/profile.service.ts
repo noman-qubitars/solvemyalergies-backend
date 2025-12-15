@@ -1,7 +1,5 @@
-import bcrypt from "bcrypt";
-import { User } from "../../models/User";
-
-const SALT_ROUNDS = 10;
+import { findUserById, findUserByIdWithoutPassword, updateUserById } from "../../models/User";
+import { hashPassword } from "./helpers/profile.service.utils";
 
 export const editProfile = async (
   userId: string,
@@ -11,42 +9,51 @@ export const editProfile = async (
     imagePath?: string;
   }
 ) => {
-  const user = await User.findById(userId);
+  const user = await findUserById(userId);
   
   if (!user) {
     throw new Error("User not found");
   }
 
+  const updateData: Partial<{
+    name: string;
+    password: string;
+    image: string;
+  }> = {};
+
   if (data.name !== undefined) {
-    user.name = data.name;
+    updateData.name = data.name;
   }
 
   if (data.newPassword) {
-    const hashedPassword = await bcrypt.hash(data.newPassword, SALT_ROUNDS);
-    user.password = hashedPassword;
+    updateData.password = await hashPassword(data.newPassword);
   }
 
   if (data.imagePath !== undefined) {
-    user.image = data.imagePath;
+    updateData.image = data.imagePath;
   }
 
-  await user.save();
+  const updatedUser = await updateUserById(userId, updateData);
+  
+  if (!updatedUser) {
+    throw new Error("Failed to update profile");
+  }
 
   return {
     success: true,
     message: "Profile updated successfully",
     data: {
-      id: user._id,
-      email: user.email,
-      name: user.name,
-      image: user.image,
-      role: user.role
+      id: updatedUser._id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      image: updatedUser.image,
+      role: updatedUser.role
     }
   };
 };
 
 export const getProfile = async (userId: string) => {
-  const user = await User.findById(userId).select("-password");
+  const user = await findUserByIdWithoutPassword(userId);
   
   if (!user) {
     throw new Error("User not found");

@@ -1,28 +1,59 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Document } from "mongoose";
+import { UserSchema, IUser } from "../schemas/User.schema";
 
-export interface IUser extends Document {
-  email: string;
-  password: string;
-  name?: string;
-  image?: string;
-  role: "user" | "admin";
-  status: "Active" | "Blocked" | "inactive";
-  activity: Date;
-  createdAt: Date;
-}
+export interface IUserDocument extends IUser, Document {}
 
-const UserSchema = new Schema<IUser>(
-  {
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    name: { type: String },
-    image: { type: String },
-    role: { type: String, enum: ["user", "admin"], default: "user" },
-    status: { type: String, enum: ["Active", "Blocked", "inactive"], default: "Active" },
-    activity: { type: Date, default: Date.now },
-    createdAt: { type: Date, default: Date.now }
-  },
-  { collection: "users" }
-);
+export const UserModel = mongoose.model<IUserDocument>("User", UserSchema);
 
-export const User = mongoose.model<IUser>("User", UserSchema);
+export { UserModel as User };
+export { IUser, UserSchema };
+
+export const findUserById = async (userId: string) => {
+  return await UserModel.findById(userId);
+};
+
+export const findUserByEmail = async (email: string) => {
+  return await UserModel.findOne({ email });
+};
+
+export const findUserByIdWithoutPassword = async (userId: string) => {
+  return await UserModel.findById(userId).select("-password").lean();
+};
+
+export const findAllUsers = async () => {
+  return await UserModel.find().select("-password").sort({ createdAt: -1 });
+};
+
+export const createUser = async (userData: Partial<IUser>) => {
+  return await UserModel.create(userData);
+};
+
+export const updateUserById = async (userId: string, updateData: Partial<IUser>) => {
+  return await UserModel.findByIdAndUpdate(
+    userId,
+    updateData,
+    { new: true }
+  );
+};
+
+export const updateUserActivity = async (userId: string) => {
+  return await UserModel.findByIdAndUpdate(
+    userId,
+    { activity: new Date() },
+    { new: true }
+  );
+};
+
+export const toggleUserStatus = async (userId: string): Promise<IUserDocument> => {
+  const user = await UserModel.findById(userId);
+  
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  user.status = user.status === "Active" ? "Blocked" : "Active";
+  user.activity = new Date();
+  await user.save();
+
+  return user;
+};

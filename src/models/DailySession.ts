@@ -1,6 +1,14 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Document } from "mongoose";
+import { DailySessionSchema, IDailySession } from "../schemas/DailySession.schema";
 
-export interface IDailySession extends Document {
+export interface IDailySessionDocument extends IDailySession, Document {}
+
+export const DailySessionModel = mongoose.model<IDailySessionDocument>("DailySession", DailySessionSchema);
+
+export { DailySessionModel as DailySession };
+export { IDailySession, DailySessionSchema };
+
+export const createDailySessionModel = async (sessionData: {
   userId: string;
   date: Date;
   answers: {
@@ -8,33 +16,51 @@ export interface IDailySession extends Document {
     answer: string | number;
   }[];
   feedback?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+}) => {
+  return await DailySessionModel.create(sessionData);
+};
 
-const DailySessionSchema = new Schema<IDailySession>(
-  {
-    userId: { type: String, required: true, index: true },
-    date: { type: Date, required: true, index: true },
-    answers: [
-      {
-        questionId: { type: String, required: true },
-        answer: { type: Schema.Types.Mixed, required: true },
-      },
-    ],
-    feedback: { type: String },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now },
-  },
-  { collection: "dailysessions" }
-);
+export const findDailySessionByUserAndDate = async (userId: string, date: Date) => {
+  return await DailySessionModel.findOne({
+    userId,
+    date,
+  });
+};
 
-DailySessionSchema.index({ userId: 1, date: 1 }, { unique: true });
+export const findDailySessionByUserAndDateLean = async (userId: string, date: Date) => {
+  return await DailySessionModel.findOne({
+    userId,
+    date,
+  }).lean();
+};
 
-DailySessionSchema.pre("save", function (next) {
-  this.updatedAt = new Date();
-  next();
-});
+export const findDailySessions = async (query: {
+  userId?: string;
+  date?: {
+    $gte?: Date;
+    $lte?: Date;
+  };
+}) => {
+  return await DailySessionModel.find(query)
+    .sort({ date: -1 })
+    .lean();
+};
 
-export const DailySession = mongoose.model<IDailySession>("DailySession", DailySessionSchema);
+export const findDailySessionById = async (sessionId: string) => {
+  return await DailySessionModel.findById(sessionId);
+};
 
+export const updateDailySessionById = async (
+  sessionId: string,
+  updateData: Partial<IDailySession>
+) => {
+  return await DailySessionModel.findByIdAndUpdate(
+    sessionId,
+    updateData,
+    { new: true }
+  );
+};
+
+export const deleteDailySessionById = async (sessionId: string) => {
+  return await DailySessionModel.findByIdAndDelete(sessionId);
+};

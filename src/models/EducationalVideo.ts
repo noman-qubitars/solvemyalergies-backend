@@ -1,32 +1,62 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Document } from "mongoose";
+import { EducationalVideoSchema, IEducationalVideo } from "../schemas/EducationalVideo.schema";
 
-export interface IEducationalVideo extends Document {
+export interface IEducationalVideoDocument extends IEducationalVideo, Document {}
+
+export const EducationalVideoModel = mongoose.model<IEducationalVideoDocument>("EducationalVideo", EducationalVideoSchema);
+
+export { EducationalVideoModel as EducationalVideo };
+export { IEducationalVideo, EducationalVideoSchema };
+
+export const createEducationalVideoModel = async (videoData: {
   title: string;
-  description: string;
+  description?: string;
   videoUrl: string;
   fileName: string;
   fileSize: number;
   mimeType: string;
   status: "uploaded" | "draft";
-  createdAt: Date;
-  updatedAt: Date;
-}
+}) => {
+  return await EducationalVideoModel.create(videoData);
+};
 
-const EducationalVideoSchema = new Schema<IEducationalVideo>(
-  {
-    title: { type: String, required: true },
-    description: { type: String, default: "" },
-    videoUrl: { type: String, required: true },
-    fileName: { type: String, required: true },
-    fileSize: { type: Number, required: true },
-    mimeType: { type: String, required: true },
-    status: { type: String, enum: ["uploaded", "draft"], default: "uploaded" },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now },
-  },
-  { collection: "educationalVideos" }
-);
+export const findEducationalVideoById = async (videoId: string) => {
+  return await EducationalVideoModel.findById(videoId);
+};
 
-EducationalVideoSchema.index({ status: 1, createdAt: -1 });
+export const findEducationalVideos = async (
+  query: { status?: "uploaded" | "draft" },
+  skip?: number,
+  limit?: number
+) => {
+  const findQuery = EducationalVideoModel.find(query).sort({ createdAt: -1 });
+  
+  if (skip !== undefined) {
+    findQuery.skip(skip);
+  }
+  
+  if (limit !== undefined) {
+    findQuery.limit(limit);
+  }
+  
+  return await findQuery;
+};
 
-export const EducationalVideo = mongoose.model<IEducationalVideo>("EducationalVideo", EducationalVideoSchema);
+export const countEducationalVideos = async (query: { status?: "uploaded" | "draft" }) => {
+  return await EducationalVideoModel.countDocuments(query);
+};
+
+export const updateEducationalVideoById = async (
+  videoId: string,
+  updateData: Partial<IEducationalVideo>
+) => {
+  return await EducationalVideoModel.findByIdAndUpdate(
+    videoId,
+    { ...updateData, updatedAt: new Date() },
+    { new: true }
+  );
+};
+
+export const deleteEducationalVideoById = async (videoId: string) => {
+  return await EducationalVideoModel.findByIdAndDelete(videoId);
+};

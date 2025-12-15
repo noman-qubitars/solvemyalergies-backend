@@ -19,4 +19,3 @@ export const getDailySessionQuestions = async (_req: Request, res: Response) => 
     });
   }
 };
-
