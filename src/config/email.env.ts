@@ -10,4 +10,3 @@ export const emailConfig = {
   from: required("EMAIL_FROM"),
   secure: toBool(env.EMAIL_SECURE, false),
 };
-

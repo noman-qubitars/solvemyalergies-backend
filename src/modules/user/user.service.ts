@@ -1,5 +1,6 @@
 import { findUserByIdWithoutPassword, findAllUsers, updateUserActivity as updateUserActivityModel, toggleUserStatus as toggleUserStatusModel } from "../../models/User";
 import { findSubscriptionByEmail, findAllSubscriptions } from "../../models/Subscription";
+import { getActiveSession, UserSessionModel } from "../../models/UserSession";
 
 export interface UserWithSubscription {
   id: string;
@@ -11,6 +12,8 @@ export interface UserWithSubscription {
   activity: Date;
   status: "Active" | "Blocked" | "inactive";
   role: "user" | "admin";
+  isOnline?: boolean;
+  lastSessionEnd?: Date;
 }
 
 export const getUserById = async (userId: string): Promise<UserWithSubscription> => {
@@ -20,7 +23,13 @@ export const getUserById = async (userId: string): Promise<UserWithSubscription>
   }
 
   const subscription = await findSubscriptionByEmail(user.email);
+  const activeSession = await getActiveSession(user._id.toString());
   
+  const lastSession = activeSession ? null : await UserSessionModel.findOne({
+    userId: user._id.toString(),
+    isActive: false
+  }).sort({ endTime: -1 });
+
   return {
     id: user._id.toString(),
     name: user.name || `${subscription?.firstName || ""} ${subscription?.lastName || ""}`.trim() || user.email.split("@")[0],
@@ -31,6 +40,8 @@ export const getUserById = async (userId: string): Promise<UserWithSubscription>
     activity: user.activity,
     status: user.status || "Active",
     role: user.role || "user",
+    isOnline: !!activeSession,
+    lastSessionEnd: lastSession?.endTime || undefined,
   };
 };
 
@@ -39,17 +50,39 @@ export const getAllUsers = async (): Promise<UserWithSubscription[]> => {
 
   const subscriptions = await findAllSubscriptions();
 
-  // Create a map of email to subscription for quick lookup
   const subscriptionMap = new Map(
     subscriptions.map((sub) => [sub.email, sub])
   );
 
-  // Combine user data with subscription data
+  const userIds = users.map(user => user._id.toString());
+  const activeSessions = await Promise.all(
+    userIds.map(userId => getActiveSession(userId))
+  );
+  const activeSessionMap = new Map(
+    activeSessions.map((session, index) => [userIds[index], session])
+  );
+
+  const lastSessions = await Promise.all(
+    userIds.map(async (userId) => {
+      if (activeSessionMap.get(userId)) return null;
+      return await UserSessionModel.findOne({
+        userId,
+        isActive: false
+      }).sort({ endTime: -1 });
+    })
+  );
+  const lastSessionMap = new Map(
+    lastSessions.map((session, index) => [userIds[index], session])
+  );
+
   const usersWithSubscription: UserWithSubscription[] = users.map((user) => {
     const subscription = subscriptionMap.get(user.email);
+    const userId = user._id.toString();
+    const activeSession = activeSessionMap.get(userId);
+    const lastSession = lastSessionMap.get(userId);
     
     return {
-      id: user._id.toString(),
+      id: userId,
       name: user.name || `${subscription?.firstName || ""} ${subscription?.lastName || ""}`.trim() || user.email.split("@")[0],
       email: user.email,
       phone: subscription?.phone || "N/A",
@@ -58,6 +91,8 @@ export const getAllUsers = async (): Promise<UserWithSubscription[]> => {
       activity: user.activity,
       status: user.status || "Active",
       role: user.role || "user",
+      isOnline: !!activeSession,
+      lastSessionEnd: lastSession?.endTime || undefined,
     };
   });
 

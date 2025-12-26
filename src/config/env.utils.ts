@@ -22,4 +22,3 @@ export const toBool = (value: string | undefined, fallback: boolean): boolean =>
   }
   return value === "true" || value === "1";
 };
-

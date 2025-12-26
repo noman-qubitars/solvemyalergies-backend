@@ -2,10 +2,11 @@ import {
   createFavorite,
   findFavoriteByUserAndVideo,
   findFavoritesByUserId,
+  deleteFavorite,
 } from "../../models/Favorite";
 import { findEducationalVideoById } from "../../models/EducationalVideo";
 
-export const addVideoToFavorites = async (userId: string, videoId: string) => {
+export const toggleVideoFavorite = async (userId: string, videoId: string) => {
   const video = await findEducationalVideoById(videoId);
   
   if (!video) {
@@ -15,7 +16,12 @@ export const addVideoToFavorites = async (userId: string, videoId: string) => {
   const existingFavorite = await findFavoriteByUserAndVideo(userId, videoId);
   
   if (existingFavorite) {
-    throw new Error("Video is already in favorites");
+    await deleteFavorite(userId, videoId);
+    return {
+      success: true,
+      message: "Video removed from favorites successfully",
+      isFavorited: false,
+    };
   }
 
   const favorite = await createFavorite({
@@ -26,6 +32,7 @@ export const addVideoToFavorites = async (userId: string, videoId: string) => {
   return {
     success: true,
     message: "Video added to favorites successfully",
+    isFavorited: true,
     data: favorite,
   };
 };

@@ -11,8 +11,8 @@ router.get("/", requireNotRole("admin"), getUserProfile);
 router.post(
   "/edit",
   requireNotRole("admin"),
-  validate(editProfileSchema),
   handleFileUpload([{ name: "image", maxCount: 1 }], uploadProfileImage),
+  validate(editProfileSchema),
   updateProfile
 );
 

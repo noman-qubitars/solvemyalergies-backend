@@ -7,4 +7,3 @@ export const stripeConfig = {
   secretKey: required("STRIPE_SECRET_KEY"),
   webhookSecret: env.STRIPE_WEBHOOK_SECRET || "",
 };
-

@@ -41,4 +41,3 @@ MessageSchema.index({ userId: 1, createdAt: -1 });
 MessageSchema.index({ isRead: 1 });
 
 export const Message = mongoose.model<IMessage>("Message", MessageSchema);
-

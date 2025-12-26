@@ -45,7 +45,7 @@ export const sendUserNotFoundError = (res: Response) => {
 export const sendAccountBlockedError = (res: Response, status: string) => {
   return res.status(403).json({
     success: false,
-    message: status === "inactive" 
+    message: status === "inactive"
       ? "Your account is not verified. Please complete your subscription to activate your account"
       : "Your account has been blocked. Please contact support"
   });

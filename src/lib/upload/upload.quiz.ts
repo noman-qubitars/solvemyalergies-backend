@@ -1,16 +1,16 @@
 import multer from "multer";
 import path from "path";
 import { ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES, FILE_SIZE_LIMITS } from "./upload.constants";
-import { createStorage, getUploadsDir, ensureDirectoryExists, generateUniqueFilename } from "./upload.utils";
+import { createStorage, getUploadsDir, ensureDirectoryExists } from "./upload.utils";
 
-const quizImageStorage = createStorage((req, file, cb) => {
+const quizImageStorage = createStorage((_req, _file, cb) => {
   const uploadsDir = getUploadsDir();
   const folderPath = path.join(uploadsDir, "images");
   ensureDirectoryExists(folderPath);
   cb(null, folderPath);
 });
 
-const quizImageFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const quizImageFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -26,7 +26,7 @@ export const uploadQuizImage = multer({
   },
 });
 
-const quizFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const quizFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const isDocument = ALLOWED_DOC_TYPES.includes(file.mimetype);
 
   if (!isDocument) {
@@ -40,7 +40,7 @@ const quizFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilt
   cb(null, true);
 };
 
-const quizStorage = createStorage((req, file, cb) => {
+const quizStorage = createStorage((_req, file, cb) => {
   const uploadsDir = getUploadsDir();
   let subfolder = "documents";
   
@@ -61,7 +61,7 @@ export const uploadQuiz = multer({
   },
 });
 
-const quizCombinedFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const quizCombinedFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   if (file.fieldname === 'photo') {
     if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
       cb(null, true);
@@ -79,7 +79,7 @@ const quizCombinedFilter = (req: any, file: Express.Multer.File, cb: multer.File
   }
 };
 
-const quizCombinedStorage = createStorage((req, file, cb) => {
+const quizCombinedStorage = createStorage((_req, file, cb) => {
   const uploadsDir = getUploadsDir();
   let subfolder = "files";
   
@@ -107,4 +107,3 @@ const uploadQuizCombined = multer({
 });
 
 export { uploadQuizCombined };
-

@@ -1,7 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../../middleware/auth";
 import {
-  addVideoToFavorites,
+  toggleVideoFavorite,
   getUserFavoriteVideos,
 } from "./educationalVideo.favorites.service";
 import {
@@ -16,7 +16,7 @@ import {
   sendInvalidPageSizeError,
 } from "./helpers/educationalVideo.controller.errors";
 
-export const addToFavorites = async (req: AuthRequest, res: Response) => {
+export const toggleFavorite = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
 
@@ -26,11 +26,11 @@ export const addToFavorites = async (req: AuthRequest, res: Response) => {
 
     const { id: videoId } = req.params;
 
-    const result = await addVideoToFavorites(userId, videoId);
+    const result = await toggleVideoFavorite(userId, videoId);
 
-    res.status(201).json(result);
+    res.status(200).json(result);
   } catch (error) {
-    return handleFavoriteError(res, error, "Failed to add video to favorites");
+    return handleFavoriteError(res, error, "Failed to toggle video favorite");
   }
 };
 

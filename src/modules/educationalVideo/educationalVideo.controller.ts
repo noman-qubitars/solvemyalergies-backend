@@ -23,6 +23,7 @@ import {
   deleteFileIfExists,
   buildUpdateData,
 } from "./helpers/educationalVideo.controller.utils";
+import { generateThumbnail } from "../../lib/generateThumbnail";
 
 export const createVideo = async (req: AuthRequest, res: Response) => {
   try {
@@ -37,11 +38,20 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
     }
 
     const videoUrl = buildVideoUrl(req.file.path);
+    
+    let thumbnailUrl;
+    try {
+      thumbnailUrl = await generateThumbnail(req.file.path);
+    } catch (thumbnailError: any) {
+      console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
+      console.error("Video uploaded successfully but without thumbnail.");
+    }
 
     const video = await createEducationalVideo({
       title,
       description: description || "",
       videoUrl,
+      thumbnailUrl,
       fileName: req.file.originalname,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
@@ -117,9 +127,24 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
         const oldFilePath = buildFilePath(existingVideo.videoUrl);
         deleteFileIfExists(oldFilePath);
       }
+      if (existingVideo?.thumbnailUrl) {
+        const oldThumbnailPath = buildFilePath(existingVideo.thumbnailUrl);
+        deleteFileIfExists(oldThumbnailPath);
+      }
     }
 
     const updateData = buildUpdateData(title, description, status, req.file);
+    
+    if (req.file) {
+      try {
+        const thumbnailUrl = await generateThumbnail(req.file.path);
+        (updateData as any).thumbnailUrl = thumbnailUrl;
+      } catch (thumbnailError: any) {
+        console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
+        console.error("Video updated successfully but without thumbnail.");
+      }
+    }
+
     const video = await updateEducationalVideo(id, updateData);
 
     if (!video) {
@@ -148,6 +173,11 @@ export const deleteVideo = async (req: AuthRequest, res: Response) => {
     if (video.videoUrl) {
       const filePath = buildFilePath(video.videoUrl);
       deleteFileIfExists(filePath);
+    }
+
+    if (video.thumbnailUrl) {
+      const thumbnailPath = buildFilePath(video.thumbnailUrl);
+      deleteFileIfExists(thumbnailPath);
     }
 
     await deleteEducationalVideo(id);

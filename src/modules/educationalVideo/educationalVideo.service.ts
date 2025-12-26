@@ -12,6 +12,7 @@ export const createEducationalVideo = async (data: {
   title: string;
   description?: string;
   videoUrl: string;
+  thumbnailUrl?: string;
   fileName: string;
   fileSize: number;
   mimeType: string;
@@ -81,6 +82,7 @@ export const updateEducationalVideo = async (
     description?: string;
     status?: "uploaded" | "draft";
     videoUrl?: string;
+    thumbnailUrl?: string;
     fileName?: string;
     fileSize?: number;
     mimeType?: string;

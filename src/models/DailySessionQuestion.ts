@@ -20,4 +20,3 @@ const DailySessionQuestionSchema = new Schema<IDailySessionQuestion>(
 );
 
 export const DailySessionQuestion = mongoose.model<IDailySessionQuestion>("DailySessionQuestion", DailySessionQuestionSchema);
-

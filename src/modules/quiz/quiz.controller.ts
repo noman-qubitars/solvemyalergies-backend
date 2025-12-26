@@ -5,6 +5,7 @@ import { UserAnswer } from "../../models/UserAnswer";
 import { validate } from "../../lib/validation/validateRequest";
 import { answerSchema, updateAnswerSchema } from "./quiz.schemas";
 import { AuthRequest } from "../../middleware/auth";
+import { assignSessionsFromAnswers } from "../../services/sessionAssignmentService";
 
 const getQuestionNumber = (questionId: string): number | null => {
   const match = questionId.match(/question_(\d+)/);
@@ -118,6 +119,16 @@ export const submitAnswer = [
         await userAnswer.save();
       }
 
+      const question10Answer = userAnswer.answers.find(ans => ans.questionId === "question_10");
+      const userGender = question10Answer && typeof question10Answer.selectedOption === 'string'
+        ? (question10Answer.selectedOption.toLowerCase().includes('female') ? 'female' : 'male')
+        : undefined;
+
+      const sessionResult = assignSessionsFromAnswers(userAnswer.answers, userGender);
+      userAnswer.assignedSessions = sessionResult.assignedSessions;
+      userAnswer.sessionAssignments = sessionResult.sessionAssignments;
+      await userAnswer.save();
+
       return res.status(201).json({
         success: true,
         message: "Answer saved successfully",
@@ -125,6 +136,8 @@ export const submitAnswer = [
           id: userAnswer._id,
           userId: userAnswer.userId,
           answers: userAnswer.answers,
+          assignedSessions: userAnswer.assignedSessions,
+          sessionAssignments: userAnswer.sessionAssignments,
           createdAt: userAnswer.createdAt,
           updatedAt: userAnswer.updatedAt
         }
@@ -224,6 +237,16 @@ export const updateAnswer = [
 
       await userAnswer.save();
 
+      const question10Answer = userAnswer.answers.find(ans => ans.questionId === "question_10");
+      const userGender = question10Answer && typeof question10Answer.selectedOption === 'string'
+        ? (question10Answer.selectedOption.toLowerCase().includes('female') ? 'female' : 'male')
+        : undefined;
+
+      const sessionResult = assignSessionsFromAnswers(userAnswer.answers, userGender);
+      userAnswer.assignedSessions = sessionResult.assignedSessions;
+      userAnswer.sessionAssignments = sessionResult.sessionAssignments;
+      await userAnswer.save();
+
       return res.status(200).json({
         success: true,
         message: "Answer updated successfully",
@@ -231,6 +254,8 @@ export const updateAnswer = [
           id: userAnswer._id,
           userId: userAnswer.userId,
           answers: userAnswer.answers,
+          assignedSessions: userAnswer.assignedSessions,
+          sessionAssignments: userAnswer.sessionAssignments,
           createdAt: userAnswer.createdAt,
           updatedAt: userAnswer.updatedAt
         }
@@ -325,6 +350,52 @@ export const patchAnswer = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const calculateSessions = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User ID not found in token"
+      });
+    }
+
+    const userAnswer = await UserAnswer.findOne({ userId });
+
+    if (!userAnswer || !userAnswer.answers || userAnswer.answers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No answers found. Please complete the quiz first."
+      });
+    }
+
+    const question10Answer = userAnswer.answers.find(ans => ans.questionId === "question_10");
+    const userGender = question10Answer && typeof question10Answer.selectedOption === 'string'
+      ? (question10Answer.selectedOption.toLowerCase().includes('female') ? 'female' : 'male')
+      : undefined;
+
+    const sessionResult = assignSessionsFromAnswers(userAnswer.answers, userGender);
+    userAnswer.assignedSessions = sessionResult.assignedSessions;
+    userAnswer.sessionAssignments = sessionResult.sessionAssignments;
+    await userAnswer.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Sessions calculated successfully",
+      data: {
+        assignedSessions: userAnswer.assignedSessions,
+        sessionAssignments: userAnswer.sessionAssignments
+      }
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error"
+    });
+  }
+};
+
 export const getQuestionsWithAnswers = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
@@ -382,12 +453,32 @@ export const getQuestionsWithAnswers = async (req: AuthRequest, res: Response) =
       })
     );
 
+    let photoArray = null;
+    if (userAnswer.photo) {
+      try {
+        photoArray = JSON.parse(userAnswer.photo);
+      } catch {
+        photoArray = userAnswer.photo;
+      }
+    }
+
+    let fileArray = null;
+    if (userAnswer.file) {
+      try {
+        fileArray = JSON.parse(userAnswer.file);
+      } catch {
+        fileArray = userAnswer.file;
+      }
+    }
+
     return res.status(200).json({
       success: true,
       data: {
         id: userAnswer._id,
         userId: userAnswer.userId,
         answers: answersWithQuestions,
+        photo: photoArray,
+        file: fileArray,
         createdAt: userAnswer.createdAt,
         updatedAt: userAnswer.updatedAt
       }

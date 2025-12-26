@@ -34,9 +34,8 @@ export const generateUniqueFilename = (originalname: string): string => {
 export const createStorage = (destination: (req: any, file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => void) => {
   return multer.diskStorage({
     destination,
-    filename: (req, file, cb) => {
+    filename: (_req, file, cb) => {
       cb(null, generateUniqueFilename(file.originalname));
     },
   });
 };
-

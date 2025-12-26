@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import { findUserByEmail, createUser, updateUserById } from "../../models/User";
 import { findSubscriptionByEmail } from "../../models/Subscription";
 import { sendOtpEmail } from "../../services/mailService";
+import { createUserSession, endAllActiveSessions } from "../../models/UserSession";
 import {
   createToken,
   generateOtpCode,
@@ -62,6 +63,9 @@ export const signin = async (payload: { email: string; password: string }) => {
     }
     
     const userId = createdUser._id.toString();
+    await endAllActiveSessions(userId);
+    await createUserSession(userId);
+    
     return { 
       success: true,
       token: createToken(userId, "user"), 
@@ -85,6 +89,9 @@ export const signin = async (payload: { email: string; password: string }) => {
   const userRole = user.role || "user";
   const userName = user.name || payload.email.split("@")[0];
   const userImage = user.image || "/uploads/images/avatar.png";
+  
+  await endAllActiveSessions(userId);
+  await createUserSession(userId);
   
   return { 
     success: true,

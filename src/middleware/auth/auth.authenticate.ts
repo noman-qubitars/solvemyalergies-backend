@@ -2,6 +2,7 @@ import { Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../../config/env";
 import { User } from "../../models/User";
+import { isTokenBlacklisted } from "../../models/TokenBlacklist";
 import { AuthRequest } from "./auth.types";
 import {
   handleAuthError,
@@ -25,7 +26,17 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     }
 
     try {
-      const decoded = jwt.verify(parsed.token!, config.jwtSecret) as { sub: string; role?: string };
+      const token = parsed.token!;
+      
+      const blacklisted = await isTokenBlacklisted(token);
+      if (blacklisted) {
+        return res.status(401).json({
+          success: false,
+          message: "Token has been invalidated. Please sign in again"
+        });
+      }
+
+      const decoded = jwt.verify(token, config.jwtSecret) as { sub: string; role?: string };
       req.userId = decoded.sub;
       req.userRole = decoded.role;
       

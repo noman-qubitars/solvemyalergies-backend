@@ -115,16 +115,18 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
         const userSymptoms = extractSymptomsFromAnswers(userAnswer.answers);
         const allVideos = await getAllSessionVideos(queryStatus);
         
-        const filteredVideos = allVideos.filter(video => {
-          if (video.symptoms.length === 0) return true;
-          return matchSymptoms(userSymptoms, video.symptoms);
-        });
-        
-        return res.status(200).json({
-          success: true,
-          data: filteredVideos,
-          total: filteredVideos.length,
-        });
+        if (userSymptoms.length > 0) {
+          const filteredVideos = allVideos.filter(video => {
+            if (video.symptoms.length === 0) return true;
+            return matchSymptoms(userSymptoms, video.symptoms);
+          });
+          
+          return res.status(200).json({
+            success: true,
+            data: filteredVideos,
+            total: filteredVideos.length,
+          });
+        }
       }
     }
 

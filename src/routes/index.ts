@@ -8,6 +8,8 @@ import { messageRouter } from "../modules/message/message.routes";
 import { educationalVideoRouter } from "../modules/educationalVideo/educationalVideo.routes";
 import { profileRouter } from "../modules/profile/profile.routes";
 import { sessionVideoRouter } from "../modules/sessionVideo/sessionVideo.routes";
+import { demoVideoRouter } from "../modules/demoVideo/demoVideo.routes";
+import { logoutRouter } from "../modules/logout/logout.routes";
 
 export const registerRoutes = (app: Express) => {
   app.use("/api/v1/auth", authRouter);
@@ -19,4 +21,6 @@ export const registerRoutes = (app: Express) => {
   app.use("/api/v1/educational-videos", educationalVideoRouter);
   app.use("/api/v1/session-videos", sessionVideoRouter);
   app.use("/api/v1/profile", profileRouter);
+  app.use("/api/v1/demo-video", demoVideoRouter);
+  app.use("/api/v1/logout", logoutRouter);
 };

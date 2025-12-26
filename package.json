@@ -16,11 +16,13 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@types/fluent-ffmpeg": "^2.1.28",
     "@types/multer": "^2.0.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "fluent-ffmpeg": "^2.1.3",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.20.1",
     "multer": "^2.0.2",

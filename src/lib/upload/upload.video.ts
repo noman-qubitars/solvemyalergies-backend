@@ -3,7 +3,7 @@ import path from "path";
 import { ALLOWED_VIDEO_TYPES, FILE_SIZE_LIMITS } from "./upload.constants";
 import { createStorage, getUploadsDir, ensureDirectoryExists, getSubfolderByMimeType } from "./upload.utils";
 
-const storage = createStorage((req, file, cb) => {
+const storage = createStorage((_req, file, cb) => {
   const uploadsDir = getUploadsDir();
   const subfolder = getSubfolderByMimeType(file.mimetype);
   const folderPath = path.join(uploadsDir, subfolder);
@@ -11,7 +11,7 @@ const storage = createStorage((req, file, cb) => {
   cb(null, folderPath);
 });
 
-const videoFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const videoFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   if (ALLOWED_VIDEO_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
