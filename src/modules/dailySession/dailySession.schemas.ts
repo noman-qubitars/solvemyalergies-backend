@@ -1,16 +1,12 @@
 import { z } from "zod";
 
-const dateSchema = z.preprocess(
-  (val) => val === undefined || val === null ? "" : val,
-  z.string().min(1, "Date is required").refine(
-    (val) => {
-      const date = new Date(val);
-      return !isNaN(date.getTime());
-    },
-    {
-      message: "Date must be a valid date string in format YYYY-MM-DD",
-    }
-  )
+const daySchema = z.preprocess(
+  (val) => (val === undefined || val === null ? undefined : Number(val)),
+  z
+    .number()
+    .int("Day must be an integer between 1 and 42")
+    .min(1, "Day is required and must be between 1 and 42")
+    .max(42, "Day must be between 1 and 42")
 );
 
 const answerSchema = z.object({
@@ -30,7 +26,7 @@ const answerSchema = z.object({
 });
 
 export const createDailySessionSchema = z.object({
-  date: dateSchema,
+  day: daySchema,
   answers: z.array(answerSchema)
     .min(6, "All 6 questions (question_1 to question_6) are required")
     .max(6, "Only 6 questions (question_1 to question_6) are allowed")

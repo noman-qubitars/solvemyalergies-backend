@@ -10,14 +10,11 @@ import { AuthRequest } from "../../middleware/auth";
 import {
   sendTitleRequiredError,
   sendVideoFileRequiredError,
-  sendInvalidPageNumberError,
-  sendInvalidPageSizeError,
   sendVideoNotFoundError,
   handleEducationalVideoError,
 } from "./helpers/educationalVideo.controller.errors";
 import {
   parseVideoStatus,
-  parsePaginationParams,
   buildVideoUrl,
   buildFilePath,
   deleteFileIfExists,
@@ -70,28 +67,17 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
 
 export const getVideos = async (req: AuthRequest, res: Response) => {
   try {
-    const { status, page, pageSize } = req.query;
+    const { status } = req.query;
 
     const queryStatus = parseVideoStatus(status as string | undefined);
-    const pagination = parsePaginationParams(page as string | undefined, pageSize as string | undefined);
-
-    if (pagination.error) {
-      if (pagination.error === "Invalid page number") {
-        return sendInvalidPageNumberError(res);
-      }
-      return sendInvalidPageSizeError(res);
-    }
 
     const userId = req.userRole === "user" ? req.userId : undefined;
-    const result = await getAllEducationalVideos(queryStatus, pagination.page, pagination.pageSize, userId);
+    const result = await getAllEducationalVideos(queryStatus, userId);
 
     res.status(200).json({
       success: true,
       data: result.videos,
       totalVideos: result.totalVideos,
-      currentPage: result.currentPage,
-      pageSize: result.pageSize,
-      totalPages: result.totalPages,
     });
   } catch (error) {
     return handleEducationalVideoError(res, error, "Failed to fetch educational videos", 500);

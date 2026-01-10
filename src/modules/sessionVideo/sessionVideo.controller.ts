@@ -9,36 +9,17 @@ import {
 } from "./sessionVideo.service";
 import { AuthRequest } from "../../middleware/auth";
 import { UserAnswer } from "../../models/UserAnswer";
+import { VideoWatchTrackingModel } from "../../models/VideoWatchTracking";
+import { SessionVideo } from "../../models/SessionVideo";
+import { generateThumbnail } from "../../lib/generateThumbnail";
+import ffmpeg from "fluent-ffmpeg";
 import fs from "fs";
 import path from "path";
-
-const extractSymptomsFromAnswers = (answers: any[]): string[] => {
-  const symptoms: string[] = [];
-  
-  const question2Answer = answers.find(ans => ans.questionId === "question_2");
-  if (question2Answer && question2Answer.selectedOption) {
-    if (Array.isArray(question2Answer.selectedOption)) {
-      symptoms.push(...question2Answer.selectedOption);
-    } else {
-      symptoms.push(question2Answer.selectedOption);
-    }
-  }
-
-  return symptoms.map(s => s.toLowerCase().trim()).filter(s => s.length > 0);
-};
-
-const normalizeSymptom = (symptom: string): string => {
-  return symptom.toLowerCase().trim();
-};
-
-const matchSymptoms = (userSymptoms: string[], videoSymptoms: string[]): boolean => {
-  if (videoSymptoms.length === 0) return true;
-  
-  const normalizedUserSymptoms = userSymptoms.map(normalizeSymptom);
-  const normalizedVideoSymptoms = videoSymptoms.map(normalizeSymptom);
-  
-  return normalizedVideoSymptoms.some(vs => normalizedUserSymptoms.includes(vs));
-};
+import {
+  extractSymptomsFromAnswers,
+  matchSymptoms,
+  formatDuration,
+} from "./helpers/sessionVideo.controller.utils";
 
 export const createVideo = async (req: AuthRequest, res: Response) => {
   try {
@@ -74,6 +55,54 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
     const filePath = req.file.path.replace(/\\/g, "/");
     const videoUrl = `/uploads/${filePath.split("uploads/")[1]}`;
 
+    // Extract video duration
+    let videoDuration: number | undefined;
+    try {
+      videoDuration = await new Promise<number>((resolve, reject) => {
+        ffmpeg.ffprobe(req.file!.path, (err, metadata) => {
+          if (err) {
+            console.error("Error extracting video duration:", err);
+            reject(err);
+          } else {
+            // Try to get duration from video stream first (more accurate)
+            let duration: number | undefined;
+            if (metadata.streams && metadata.streams.length > 0) {
+              const videoStream = metadata.streams.find((s: any) => s.codec_type === 'video');
+              if (videoStream && videoStream.duration) {
+                duration = parseFloat(videoStream.duration);
+              }
+            }
+            
+            // Fall back to format duration if stream duration not available
+            if (!duration || isNaN(duration)) {
+              duration = metadata.format.duration;
+            }
+            
+            if (duration && !isNaN(duration)) {
+              // Use Math.ceil to round up to ensure we don't lose any seconds
+              // This matches video player behavior better
+              resolve(Math.ceil(duration));
+            } else {
+              reject(new Error("Could not extract video duration"));
+            }
+          }
+        });
+      });
+    } catch (error) {
+      console.error("Failed to extract video duration:", error);
+      // Continue without duration - it can be set later when video is watched
+      videoDuration = undefined;
+    }
+
+    // Generate thumbnail
+    let thumbnailUrl: string | undefined;
+    try {
+      thumbnailUrl = await generateThumbnail(req.file.path);
+    } catch (thumbnailError: any) {
+      console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
+      console.error("Video uploaded successfully but without thumbnail.");
+    }
+
     const video = await createSessionVideo({
       title,
       description: description || "",
@@ -83,6 +112,8 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
       mimeType: req.file.mimetype,
       symptoms: symptomsArray,
       status: status || "uploaded",
+      videoDuration,
+      thumbnailUrl,
     });
 
     res.status(201).json({
@@ -108,6 +139,38 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
       queryStatus = "uploaded";
     }
 
+    // Helper function to add videoDuration to videos
+    const addVideoDurationToVideos = async (videos: any[]) => {
+      const videosWithDuration = await Promise.all(
+        videos.map(async (video) => {
+          const videoObj = video.toObject ? video.toObject() : video;
+          
+          // First check if videoDuration is stored in SessionVideo model
+          let durationInSeconds = videoObj.videoDuration;
+          
+          // If not, get videoDuration from VideoWatchTracking (any user's tracking for this video)
+          if (!durationInSeconds) {
+            const tracking = await VideoWatchTrackingModel.findOne({ videoId: video._id.toString() })
+              .select('videoDuration')
+              .sort({ createdAt: -1 }) // Get the most recent tracking
+              .lean();
+            
+            // If tracking found, update SessionVideo with duration for future queries
+            if (tracking?.videoDuration) {
+              durationInSeconds = tracking.videoDuration;
+              await SessionVideo.findByIdAndUpdate(video._id, { videoDuration: tracking.videoDuration });
+            }
+          }
+          
+          return {
+            ...videoObj,
+            videoDuration: formatDuration(durationInSeconds),
+          };
+        })
+      );
+      return videosWithDuration;
+    };
+
     if (userId) {
       const userAnswer = await UserAnswer.findOne({ userId });
       
@@ -121,20 +184,24 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
             return matchSymptoms(userSymptoms, video.symptoms);
           });
           
+          const videosWithDuration = await addVideoDurationToVideos(filteredVideos);
+          
           return res.status(200).json({
             success: true,
-            data: filteredVideos,
-            total: filteredVideos.length,
+            data: videosWithDuration,
+            total: videosWithDuration.length,
           });
         }
       }
     }
 
     const videos = await getAllSessionVideos(queryStatus);
+    const videosWithDuration = await addVideoDurationToVideos(videos);
+    
     res.status(200).json({
       success: true,
-      data: videos,
-      total: videos.length,
+      data: videosWithDuration,
+      total: videosWithDuration.length,
     });
   } catch (error: any) {
     res.status(500).json({
@@ -156,9 +223,33 @@ export const getVideoById = async (req: Request, res: Response) => {
       });
     }
 
+    const videoObj = video.toObject ? video.toObject() : video;
+    
+    // First check if videoDuration is stored in SessionVideo model
+    let videoDuration = videoObj.videoDuration;
+    
+    // If not, get videoDuration from VideoWatchTracking
+    if (!videoDuration) {
+      const tracking = await VideoWatchTrackingModel.findOne({ videoId: id })
+        .select('videoDuration')
+        .sort({ createdAt: -1 })
+        .lean();
+      
+      if (tracking?.videoDuration) {
+        videoDuration = tracking.videoDuration;
+        // Update SessionVideo with duration for future queries
+        await SessionVideo.findByIdAndUpdate(id, { videoDuration: tracking.videoDuration });
+      }
+    }
+    
+    const videoWithDuration = {
+      ...videoObj,
+      videoDuration: formatDuration(videoDuration),
+    };
+
     res.status(200).json({
       success: true,
-      data: video,
+      data: videoWithDuration,
     });
   } catch (error: any) {
     res.status(500).json({
@@ -207,6 +298,65 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
       updateData.fileName = req.file.originalname;
       updateData.fileSize = req.file.size;
       updateData.mimeType = req.file.mimetype;
+
+      // Extract video duration from new video file
+      try {
+        const videoDuration = await new Promise<number>((resolve, reject) => {
+          ffmpeg.ffprobe(req.file!.path, (err, metadata) => {
+            if (err) {
+              console.error("Error extracting video duration:", err);
+              reject(err);
+            } else {
+              // Try to get duration from video stream first (more accurate)
+              let duration: number | undefined;
+              if (metadata.streams && metadata.streams.length > 0) {
+                const videoStream = metadata.streams.find((s: any) => s.codec_type === 'video');
+                if (videoStream && videoStream.duration) {
+                  duration = parseFloat(videoStream.duration);
+                }
+              }
+              
+              // Fall back to format duration if stream duration not available
+              if (!duration || isNaN(duration)) {
+                duration = metadata.format.duration;
+              }
+              
+              if (duration && !isNaN(duration)) {
+                // Use Math.ceil to round up to ensure we don't lose any seconds
+                // This matches video player behavior better
+                resolve(Math.ceil(duration));
+              } else {
+                reject(new Error("Could not extract video duration"));
+              }
+            }
+          });
+        });
+        updateData.videoDuration = videoDuration;
+      } catch (error) {
+        console.error("Failed to extract video duration:", error);
+        // Continue without duration - it can be set later when video is watched
+      }
+
+      // Generate thumbnail for new video file
+      try {
+        // Delete old thumbnail if exists
+        if (existingVideo?.thumbnailUrl) {
+          const oldThumbnailPath = path.join(
+            process.cwd(),
+            "uploads",
+            existingVideo.thumbnailUrl.replace("/uploads/", "")
+          );
+          if (fs.existsSync(oldThumbnailPath)) {
+            fs.unlinkSync(oldThumbnailPath);
+          }
+        }
+        
+        const thumbnailUrl = await generateThumbnail(req.file.path);
+        updateData.thumbnailUrl = thumbnailUrl;
+      } catch (thumbnailError: any) {
+        console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
+        console.error("Video updated successfully but without thumbnail.");
+      }
     }
 
     const video = await updateSessionVideo(id, updateData);

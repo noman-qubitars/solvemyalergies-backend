@@ -2,7 +2,7 @@ import { Schema } from "mongoose";
 
 export interface IDailySession {
   userId: string;
-  date: Date;
+  day: number;
   answers: {
     questionId: string;
     answer: string | number;
@@ -15,7 +15,7 @@ export interface IDailySession {
 export const DailySessionSchema = new Schema(
   {
     userId: { type: String, required: true, index: true },
-    date: { type: Date, required: true, index: true },
+    day: { type: Number, required: true, min: 1, max: 42, index: true },
     answers: [
       {
         questionId: { type: String, required: true },
@@ -29,7 +29,7 @@ export const DailySessionSchema = new Schema(
   { collection: "dailysessions" }
 );
 
-DailySessionSchema.index({ userId: 1, date: 1 }, { unique: true });
+DailySessionSchema.index({ userId: 1, day: 1 }, { unique: true });
 
 DailySessionSchema.pre("save", function (next) {
   this.updatedAt = new Date();

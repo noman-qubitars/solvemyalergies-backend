@@ -124,3 +124,79 @@ export const sendSubscriptionEmail = async (
     throw new Error(`Failed to send email: ${error.message}`);
   }
 };
+
+export const sendFeedbackEmail = async (
+  fullName: string,
+  userEmail: string,
+  emoji: string,
+  message: string,
+  recipientEmail: string
+) => {
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Poppins', Arial, sans-serif; color: #222222; margin: 0; padding: 20px; background-color: #f8f8f8; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; }
+        .header { background: linear-gradient(to right, #11401c, #1f7332, #859b5b); color: white; padding: 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 700; color: white; }
+        .content { padding: 30px; }
+        .feedback-box { background: #f2fff6; border: 2px solid #11401c; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .feedback-label { font-weight: 700; color: #11401c; font-size: 14px; margin-bottom: 8px; }
+        .feedback-value { color: #484c52; font-size: 14px; line-height: 1.6; }
+        .message { color: #484c52; font-size: 14px; line-height: 1.6; margin: 15px 0; }
+        .footer { background: #f8f8f8; padding: 15px; text-align: center; color: #717171; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>SolveMyAllergies - User Feedback</h1>
+        </div>
+        <div class="content">
+          <p class="message">You have received user feedback:</p>
+          
+          <div class="feedback-box">
+            <div class="feedback-label">Full Name:</div>
+            <div class="feedback-value">${fullName}</div>
+          </div>
+
+          <div class="feedback-box">
+            <div class="feedback-label">Email:</div>
+            <div class="feedback-value">${userEmail}</div>
+          </div>
+
+          <div class="feedback-box">
+            <div class="feedback-label">Experience:</div>
+            <div class="feedback-value" style="font-size: 24px;">${emoji}</div>
+          </div>
+
+          <div class="feedback-box">
+            <div class="feedback-label">Message:</div>
+            <div class="feedback-value">${message.replace(/\n/g, '<br>')}</div>
+          </div>
+
+          <p class="message">Best regards,<br><strong>SolveMyAllergies Team</strong></p>
+        </div>
+        <div class="footer">
+          <p>© SolveMyAllergies</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: config.email.from,
+      to: recipientEmail,
+      subject: "SolveMyAllergies - User Feedback Received",
+      html: htmlContent,
+      text: `User feedback received from ${fullName} (${userEmail}).\n\nExperience: ${emoji}\n\nMessage:\n${message}`
+    });
+  } catch (error: any) {
+    console.error("Error sending feedback email:", error);
+    throw new Error(`Failed to send email: ${error.message}`);
+  }
+};

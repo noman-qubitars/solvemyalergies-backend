@@ -9,6 +9,8 @@ export interface ISessionVideo extends Document {
   mimeType: string;
   symptoms: string[];
   status: "uploaded" | "draft";
+  videoDuration?: number; 
+  thumbnailUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +25,8 @@ const SessionVideoSchema = new Schema<ISessionVideo>(
     mimeType: { type: String, required: true },
     symptoms: { type: [String], default: [] },
     status: { type: String, enum: ["uploaded", "draft"], default: "uploaded" },
+    videoDuration: { type: Number }, 
+    thumbnailUrl: { type: String }, 
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },
@@ -33,4 +37,3 @@ SessionVideoSchema.index({ status: 1, createdAt: -1 });
 SessionVideoSchema.index({ symptoms: 1 });
 
 export const SessionVideo = mongoose.model<ISessionVideo>("SessionVideo", SessionVideoSchema);
-

@@ -9,6 +9,8 @@ export const createSessionVideo = async (data: {
   mimeType: string;
   symptoms: string[];
   status: "uploaded" | "draft";
+  videoDuration?: number;
+  thumbnailUrl?: string;
 }) => {
   const video = new SessionVideo(data);
   return await video.save();
@@ -48,6 +50,8 @@ export const updateSessionVideo = async (
     fileName?: string;
     fileSize?: number;
     mimeType?: string;
+    videoDuration?: number;
+    thumbnailUrl?: string;
   }
 ) => {
   return await SessionVideo.findByIdAndUpdate(
@@ -60,4 +64,3 @@ export const updateSessionVideo = async (
 export const deleteSessionVideo = async (id: string) => {
   return await SessionVideo.findByIdAndDelete(id);
 };
-

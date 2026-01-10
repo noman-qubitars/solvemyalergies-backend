@@ -23,20 +23,14 @@ export const createEducationalVideo = async (data: {
 
 export const getAllEducationalVideos = async (
   status?: "uploaded" | "draft",
-  page?: number,
-  pageSize?: number,
   userId?: string
 ) => {
   const query = status ? { status } : {};
   
   const totalVideos = await countEducationalVideos(query);
 
-  const defaultPageSize = 10;
-  const effectivePageSize = pageSize || defaultPageSize;
-  const effectivePage = page || 1;
-
-  const skip = (effectivePage - 1) * effectivePageSize;
-  const videos = await findEducationalVideos(query, skip, effectivePageSize);
+  // Return all videos without pagination
+  const videos = await findEducationalVideos(query);
 
   let videosWithFavorites;
   
@@ -65,9 +59,6 @@ export const getAllEducationalVideos = async (
   return {
     videos: videosWithFavorites,
     totalVideos,
-    currentPage: effectivePage,
-    pageSize: effectivePageSize,
-    totalPages: Math.ceil(totalVideos / effectivePageSize),
   };
 };
 

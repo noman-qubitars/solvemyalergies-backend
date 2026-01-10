@@ -30,7 +30,7 @@ export const generateThumbnail = (videoPath: string): Promise<string> => {
 
       ffmpeg(videoPath)
         .screenshots({
-          timestamps: [2],
+          timestamps: [0], // Capture from the start of the video
           filename: thumbnailFilename,
           folder: thumbnailsDir,
           size: "320x240"

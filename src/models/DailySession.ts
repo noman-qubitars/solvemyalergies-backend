@@ -10,7 +10,7 @@ export { IDailySession, DailySessionSchema };
 
 export const createDailySessionModel = async (sessionData: {
   userId: string;
-  date: Date;
+  day: number;
   answers: {
     questionId: string;
     answer: string | number;
@@ -20,29 +20,26 @@ export const createDailySessionModel = async (sessionData: {
   return await DailySessionModel.create(sessionData);
 };
 
-export const findDailySessionByUserAndDate = async (userId: string, date: Date) => {
+export const findDailySessionByUserAndDay = async (userId: string, day: number) => {
   return await DailySessionModel.findOne({
     userId,
-    date,
+    day,
   });
 };
 
-export const findDailySessionByUserAndDateLean = async (userId: string, date: Date) => {
+export const findDailySessionByUserAndDayLean = async (userId: string, day: number) => {
   return await DailySessionModel.findOne({
     userId,
-    date,
+    day,
   }).lean();
 };
 
 export const findDailySessions = async (query: {
   userId?: string;
-  date?: {
-    $gte?: Date;
-    $lte?: Date;
-  };
+  day?: number | { $gte?: number; $lte?: number };
 }) => {
   return await DailySessionModel.find(query)
-    .sort({ date: -1 })
+    .sort({ day: 1 })
     .lean();
 };
 

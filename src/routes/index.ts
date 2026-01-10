@@ -10,6 +10,8 @@ import { profileRouter } from "../modules/profile/profile.routes";
 import { sessionVideoRouter } from "../modules/sessionVideo/sessionVideo.routes";
 import { demoVideoRouter } from "../modules/demoVideo/demoVideo.routes";
 import { logoutRouter } from "../modules/logout/logout.routes";
+import { videoWatchTrackingRouter } from "../modules/videoWatchTracking/videoWatchTracking.routes";
+import { supportRouter } from "../modules/support/support.routes";
 
 export const registerRoutes = (app: Express) => {
   app.use("/api/v1/auth", authRouter);
@@ -23,4 +25,6 @@ export const registerRoutes = (app: Express) => {
   app.use("/api/v1/profile", profileRouter);
   app.use("/api/v1/demo-video", demoVideoRouter);
   app.use("/api/v1/logout", logoutRouter);
+  app.use("/api/v1/video-watch", videoWatchTrackingRouter);
+  app.use("/api/v1/support", supportRouter);
 };

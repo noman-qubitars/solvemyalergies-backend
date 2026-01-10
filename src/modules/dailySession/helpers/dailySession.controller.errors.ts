@@ -7,24 +7,17 @@ export const sendUserIdNotFoundError = (res: Response) => {
   });
 };
 
-export const sendDateRequiredError = (res: Response) => {
+export const sendDayRequiredError = (res: Response) => {
   return res.status(400).json({
     success: false,
-    message: "Date is required",
+    message: "Day is required",
   });
 };
 
-export const sendInvalidDateError = (res: Response) => {
+export const sendInvalidDayError = (res: Response) => {
   return res.status(400).json({
     success: false,
-    message: "Date must be a valid date string in format YYYY-MM-DD",
-  });
-};
-
-export const sendDateNotTodayError = (res: Response) => {
-  return res.status(400).json({
-    success: false,
-    message: "You can only submit a session for today's date",
+    message: "Day must be a number between 1 and 42",
   });
 };
 
@@ -32,6 +25,14 @@ export const sendAnswersNotArrayError = (res: Response) => {
   return res.status(400).json({
     success: false,
     message: "Answers must be an array",
+  });
+};
+
+// Keep old function names for backward compatibility with getSessionByDate
+export const sendDateRequiredError = (res: Response) => {
+  return res.status(400).json({
+    success: false,
+    message: "Date is required",
   });
 };
 
@@ -81,6 +82,13 @@ export const sendSessionNotFoundError = (res: Response) => {
   return res.status(404).json({
     success: false,
     message: "Session not found for this date",
+  });
+};
+
+export const sendPreviousDayVideoNotCompletedError = (res: Response) => {
+  return res.status(403).json({
+    success: false,
+    message: "Please complete the previous day's session video before starting a new session. Videos must be watched completely without skipping forward.",
   });
 };
 

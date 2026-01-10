@@ -18,4 +18,3 @@ sessionVideoRouter.put("/:id", authenticate, requireRole("admin"), uploadVideo.s
 sessionVideoRouter.delete("/:id", authenticate, requireRole("admin"), deleteVideo);
 
 export { sessionVideoRouter };
-

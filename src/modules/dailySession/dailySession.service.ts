@@ -1,14 +1,14 @@
 import {
   createDailySessionModel,
-  findDailySessionByUserAndDate,
-  findDailySessionByUserAndDateLean,
+  findDailySessionByUserAndDay,
+  findDailySessionByUserAndDayLean,
   findDailySessions,
 } from "../../models/DailySession";
 import { DailySessionQuestion } from "../../models/DailySessionQuestion";
 
 export interface CreateDailySessionData {
   userId: string;
-  date: Date;
+  day: number;
   answers: {
     questionId: string;
     answer: string | number;
@@ -18,30 +18,21 @@ export interface CreateDailySessionData {
 
 export interface GetDailySessionsParams {
   userId?: string;
-  startDate?: Date;
-  endDate?: Date;
+  day?: number;
 }
 
-const parseDateToUTC = (dateInput: Date | string): Date => {
-  const dateStr = typeof dateInput === 'string' ? dateInput : dateInput.toISOString().split('T')[0];
-  const [year, month, day] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-};
-
 export const createDailySession = async (data: CreateDailySessionData) => {
-  const { userId, date, answers, feedback } = data;
+  const { userId, day, answers, feedback } = data;
 
-  const sessionDate = parseDateToUTC(date);
-
-  const existingSession = await findDailySessionByUserAndDate(userId, sessionDate);
+  const existingSession = await findDailySessionByUserAndDay(userId, day);
 
   if (existingSession) {
-    throw new Error("You have already submitted a session for this date. Each day allows only one session.");
+    throw new Error("You have already submitted a session for this day. Each day allows only one session.");
   }
 
   const session = await createDailySessionModel({
     userId,
-    date: sessionDate,
+    day,
     answers,
     feedback,
   });
@@ -54,7 +45,7 @@ export const createDailySession = async (data: CreateDailySessionData) => {
 };
 
 export const getDailySessions = async (params: GetDailySessionsParams) => {
-  const { userId, startDate, endDate } = params;
+  const { userId, day } = params;
 
   const query: any = {};
 
@@ -62,16 +53,8 @@ export const getDailySessions = async (params: GetDailySessionsParams) => {
     query.userId = userId;
   }
 
-  if (startDate || endDate) {
-    query.date = {};
-    if (startDate) {
-      query.date.$gte = parseDateToUTC(startDate);
-    }
-    if (endDate) {
-      const end = parseDateToUTC(endDate);
-      end.setUTCHours(23, 59, 59, 999);
-      query.date.$lte = end;
-    }
+  if (day !== undefined && day !== null) {
+    query.day = day;
   }
 
   const sessions = await findDailySessions(query);
@@ -102,14 +85,11 @@ export const getDailySessions = async (params: GetDailySessionsParams) => {
   return {
     success: true,
     data: sessionsWithQuestions,
-    total: sessionsWithQuestions.length,
   };
 };
 
-export const getDailySessionByDate = async (userId: string, date: Date) => {
-  const sessionDate = parseDateToUTC(date);
-
-  const session = await findDailySessionByUserAndDateLean(userId, sessionDate);
+export const getDailySessionByDay = async (userId: string, day: number) => {
+  const session = await findDailySessionByUserAndDayLean(userId, day);
 
   if (!session) {
     return null;
