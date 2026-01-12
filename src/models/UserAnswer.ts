@@ -11,6 +11,8 @@ export interface IUserAnswer extends Document {
   answers: AnswerItem[];
   photo?: string;
   file?: string;
+  assignedSessions?: string[];
+  sessionAssignments?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +29,8 @@ const UserAnswerSchema = new Schema<IUserAnswer>(
     answers: { type: [AnswerItemSchema], default: [] },
     photo: { type: String },
     file: { type: String },
+    assignedSessions: { type: [String], default: [] },
+    sessionAssignments: { type: Schema.Types.Mixed, default: {} },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
   },
