@@ -34,11 +34,39 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
       return sendVideoFileRequiredError(res);
     }
 
-    const videoUrl = buildVideoUrl(req.file.path);
+    // Get S3 URL from multer-s3
+    const videoUrl = (req.file as any).location || buildVideoUrl(req.file.path);
+    const videoKey = (req.file as any).key || req.file.path;
+    
+    // For S3 files, download temporarily for processing
+    let tempVideoPath: string | null = null;
+    let videoPathForProcessing = req.file.path;
+
+    if ((req.file as any).location) {
+      try {
+        const { downloadVideoFromS3 } = await import("../../lib/generateThumbnail");
+        tempVideoPath = await downloadVideoFromS3(videoKey);
+        videoPathForProcessing = tempVideoPath;
+      } catch (downloadError: any) {
+        console.error("Failed to download video from S3 for processing:", downloadError);
+      }
+    }
     
     let thumbnailUrl;
     try {
-      thumbnailUrl = await generateThumbnail(req.file.path);
+      thumbnailUrl = await generateThumbnail(videoPathForProcessing);
+      
+      // Clean up temp file if it was downloaded from S3
+      if (tempVideoPath && (req.file as any).location) {
+        try {
+          const fs = await import("fs");
+          if (fs.existsSync(tempVideoPath)) {
+            fs.unlinkSync(tempVideoPath);
+          }
+        } catch (cleanupError) {
+          console.error("Failed to cleanup temp video file:", cleanupError);
+        }
+      }
     } catch (thumbnailError: any) {
       console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
       console.error("Video uploaded successfully but without thumbnail.");
@@ -122,9 +150,36 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
     const updateData = buildUpdateData(title, description, status, req.file);
     
     if (req.file) {
+      // Get S3 URL
+      const videoKey = (req.file as any).key || req.file.path;
+      let tempVideoPath: string | null = null;
+      let videoPathForProcessing = req.file.path;
+
+      if ((req.file as any).location) {
+        try {
+          const { downloadVideoFromS3 } = await import("../../lib/generateThumbnail");
+          tempVideoPath = await downloadVideoFromS3(videoKey);
+          videoPathForProcessing = tempVideoPath;
+        } catch (downloadError: any) {
+          console.error("Failed to download video from S3 for processing:", downloadError);
+        }
+      }
+      
       try {
-        const thumbnailUrl = await generateThumbnail(req.file.path);
+        const thumbnailUrl = await generateThumbnail(videoPathForProcessing);
         (updateData as any).thumbnailUrl = thumbnailUrl;
+        
+        // Clean up temp file if it was downloaded from S3
+        if (tempVideoPath && (req.file as any).location) {
+          try {
+            const fs = await import("fs");
+            if (fs.existsSync(tempVideoPath)) {
+              fs.unlinkSync(tempVideoPath);
+            }
+          } catch (cleanupError) {
+            console.error("Failed to cleanup temp video file:", cleanupError);
+          }
+        }
       } catch (thumbnailError: any) {
         console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
         console.error("Video updated successfully but without thumbnail.");

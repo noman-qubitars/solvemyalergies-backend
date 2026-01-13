@@ -11,7 +11,7 @@ import { AuthRequest } from "../../middleware/auth";
 import { UserAnswer } from "../../models/UserAnswer";
 import { VideoWatchTrackingModel } from "../../models/VideoWatchTracking";
 import { SessionVideo } from "../../models/SessionVideo";
-import { generateThumbnail } from "../../lib/generateThumbnail";
+import { generateThumbnail, downloadVideoFromS3 } from "../../lib/generateThumbnail";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs";
 import path from "path";
@@ -52,14 +52,33 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const filePath = req.file.path.replace(/\\/g, "/");
-    const videoUrl = `/uploads/${filePath.split("uploads/")[1]}`;
+    // Get S3 URL from multer-s3 (location property) or fallback to key/path
+    const videoUrl = (req.file as any).location || req.file.path;
+    const videoKey = (req.file as any).key || req.file.path;
+
+    // For S3 files, we need to download temporarily for ffmpeg processing
+    let tempVideoPath: string | null = null;
+    let videoPathForProcessing = req.file.path;
+
+    // Check if file is in S3 (has location property)
+    if ((req.file as any).location) {
+      try {
+        // Download from S3 to temp file for processing
+        tempVideoPath = await downloadVideoFromS3(videoKey);
+        if (tempVideoPath) {
+          videoPathForProcessing = tempVideoPath;
+        }
+      } catch (downloadError: any) {
+        console.error("Failed to download video from S3 for processing:", downloadError);
+        // Continue with original path as fallback
+      }
+    }
 
     // Extract video duration
     let videoDuration: number | undefined;
     try {
       videoDuration = await new Promise<number>((resolve, reject) => {
-        ffmpeg.ffprobe(req.file!.path, (err, metadata) => {
+        ffmpeg.ffprobe(videoPathForProcessing, (err, metadata) => {
           if (err) {
             console.error("Error extracting video duration:", err);
             reject(err);
@@ -94,13 +113,25 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
       videoDuration = undefined;
     }
 
-    // Generate thumbnail
+    // Generate thumbnail using the processing path
     let thumbnailUrl: string | undefined;
     try {
-      thumbnailUrl = await generateThumbnail(req.file.path);
+      thumbnailUrl = await generateThumbnail(videoPathForProcessing);
     } catch (thumbnailError: any) {
       console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
       console.error("Video uploaded successfully but without thumbnail.");
+    }
+
+    // Clean up temp file if it was downloaded from S3
+    if (tempVideoPath && (req.file as any).location) {
+      try {
+        const fs = await import("fs");
+        if (fs.existsSync(tempVideoPath)) {
+          fs.unlinkSync(tempVideoPath);
+        }
+      } catch (cleanupError) {
+        console.error("Failed to cleanup temp video file:", cleanupError);
+      }
     }
 
     const video = await createSessionVideo({
@@ -264,6 +295,15 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { title, description, symptoms, status } = req.body;
 
+    // Fetch existing video to get old thumbnail URL
+    const existingVideo = await getSessionVideoById(id);
+    if (!existingVideo) {
+      return res.status(404).json({
+        success: false,
+        message: "Session video not found",
+      });
+    }
+
     const updateData: any = {};
     if (title) updateData.title = title;
     if (description !== undefined) updateData.description = description;
@@ -281,28 +321,34 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
     }
 
     if (req.file) {
-      const existingVideo = await getSessionVideoById(id);
-      if (existingVideo?.videoUrl) {
-        const oldFilePath = path.join(
-          process.cwd(),
-          "uploads",
-          existingVideo.videoUrl.replace("/uploads/", "")
-        );
-        if (fs.existsSync(oldFilePath)) {
-          fs.unlinkSync(oldFilePath);
-        }
-      }
-
-      const filePath = req.file.path.replace(/\\/g, "/");
-      updateData.videoUrl = `/uploads/${filePath.split("uploads/")[1]}`;
+      // Get S3 URL from multer-s3
+      const videoUrl = (req.file as any).location || req.file.path;
+      const videoKey = (req.file as any).key || req.file.path;
+      
+      updateData.videoUrl = videoUrl;
       updateData.fileName = req.file.originalname;
       updateData.fileSize = req.file.size;
       updateData.mimeType = req.file.mimetype;
 
+      // For S3 files, download temporarily for processing
+      let tempVideoPath: string | null = null;
+      let videoPathForProcessing = req.file.path;
+
+      if ((req.file as any).location) {
+        try {
+          tempVideoPath = await downloadVideoFromS3(videoKey);
+          if (tempVideoPath) {
+            videoPathForProcessing = tempVideoPath;
+          }
+        } catch (downloadError: any) {
+          console.error("Failed to download video from S3 for processing:", downloadError);
+        }
+      }
+
       // Extract video duration from new video file
       try {
         const videoDuration = await new Promise<number>((resolve, reject) => {
-          ffmpeg.ffprobe(req.file!.path, (err, metadata) => {
+          ffmpeg.ffprobe(videoPathForProcessing, (err, metadata) => {
             if (err) {
               console.error("Error extracting video duration:", err);
               reject(err);
@@ -351,7 +397,18 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
           }
         }
         
-        const thumbnailUrl = await generateThumbnail(req.file.path);
+        const thumbnailUrl = await generateThumbnail(videoPathForProcessing);
+        
+        // Clean up temp file if it was downloaded from S3
+        if (tempVideoPath && (req.file as any).location) {
+          try {
+            if (fs.existsSync(tempVideoPath)) {
+              fs.unlinkSync(tempVideoPath);
+            }
+          } catch (cleanupError) {
+            console.error("Failed to cleanup temp video file:", cleanupError);
+          }
+        }
         updateData.thumbnailUrl = thumbnailUrl;
       } catch (thumbnailError: any) {
         console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
@@ -417,4 +474,3 @@ export const deleteVideo = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-

@@ -26,6 +26,11 @@ export const parsePaginationParams = (
 };
 
 export const buildVideoUrl = (filePath: string): string => {
+  // If it's already an S3 URL (starts with http), return as is
+  if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
+    return filePath;
+  }
+  // For multer-s3, check if location property exists (handled in controller)
   const normalizedPath = filePath.replace(/\\/g, "/");
   return `/uploads/${normalizedPath.split("uploads/")[1]}`;
 };
@@ -76,7 +81,8 @@ export const buildUpdateData = (
   }
 
   if (file) {
-    updateData.videoUrl = buildVideoUrl(file.path);
+    // Get S3 URL from multer-s3 (location property) or fallback to path
+    updateData.videoUrl = (file as any).location || buildVideoUrl(file.path);
     updateData.fileName = file.originalname;
     updateData.fileSize = file.size;
     updateData.mimeType = file.mimetype;

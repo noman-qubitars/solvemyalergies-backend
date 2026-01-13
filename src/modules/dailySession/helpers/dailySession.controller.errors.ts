@@ -85,10 +85,14 @@ export const sendSessionNotFoundError = (res: Response) => {
   });
 };
 
-export const sendPreviousDayVideoNotCompletedError = (res: Response) => {
+export const sendPreviousDayVideoNotCompletedError = (res: Response, incompleteDay?: number) => {
+  const message = incompleteDay
+    ? `Please complete day ${incompleteDay}'s session video before starting a new session. All previous days' videos must be watched completely.`
+    : "Please complete all previous days' session videos before starting a new session. Videos must be watched completely without skipping forward.";
+  
   return res.status(403).json({
     success: false,
-    message: "Please complete the previous day's session video before starting a new session. Videos must be watched completely without skipping forward.",
+    message,
   });
 };
 

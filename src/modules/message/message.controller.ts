@@ -38,8 +38,8 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     let mimeType: string | undefined;
 
     if (req.file) {
-      const filePath = req.file.path.replace(/\\/g, "/");
-      fileUrl = `/uploads/${filePath.split("uploads/")[1]}`;
+      const { getS3Url } = await import("../../lib/upload/upload.s3");
+      fileUrl = (req.file as any).location || getS3Url((req.file as any).key || req.file.path);
       fileName = req.file.originalname;
       fileSize = req.file.size;
       mimeType = req.file.mimetype;

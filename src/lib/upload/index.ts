@@ -1,13 +1,17 @@
 import path from "path";
 import { getUploadsDir, ensureDirectoryExists } from "./upload.utils";
+import { isS3Configured } from "../../config/s3.env";
 
-const uploadsDir = getUploadsDir();
-const profileDir = path.join(uploadsDir, "profile");
-const thumbnailsDir = path.join(uploadsDir, "thumbnails");
+// Only create directories if S3 is not configured (local development)
+if (!isS3Configured()) {
+  const uploadsDir = getUploadsDir();
+  const profileDir = path.join(uploadsDir, "profile");
+  const thumbnailsDir = path.join(uploadsDir, "thumbnails");
 
-ensureDirectoryExists(uploadsDir);
-ensureDirectoryExists(profileDir);
-ensureDirectoryExists(thumbnailsDir);
+  ensureDirectoryExists(uploadsDir);
+  ensureDirectoryExists(profileDir);
+  ensureDirectoryExists(thumbnailsDir);
+}
 
 export { upload } from "./upload.general";
 export { uploadVideo } from "./upload.video";

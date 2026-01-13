@@ -1,6 +1,12 @@
 import { Response } from "express";
 import { createDailySession, getDailySessions, getDailySessionByDay } from "./dailySession.service";
-import { checkVideoCompletedForDay } from "../videoWatchTracking/videoWatchTracking.service";
+import { 
+  checkVideoCompletedForDay, 
+  checkPreviousDaysFormSubmittedButVideoNotWatched,
+  checkPreviousDayVideoCompleted,
+  checkAllPreviousDaysVideosCompleted 
+} from "../videoWatchTracking/videoWatchTracking.service";
+import { findDailySessionByUserAndDay } from "../../models/DailySession";
 import { AuthRequest } from "../../middleware/auth";
 import {
   sendUserIdNotFoundError,
@@ -16,7 +22,6 @@ import {
   sendPreviousDayVideoNotCompletedError,
   handleDailySessionError,
 } from "./helpers/dailySession.controller.errors";
-import { checkPreviousDayVideoCompleted } from "../videoWatchTracking/videoWatchTracking.service";
 import {
   validateRequiredQuestions,
   validateAnswer,
@@ -44,34 +49,40 @@ export const createSession = async (req: AuthRequest, res: Response) => {
       return sendInvalidDayError(res);
     }
 
-    // Check if previous day's video was completed (except for day 1)
-    // Allow skipping if user has symptoms that map to this day
+    // Check if ALL previous days' videos were completed (except for day 1)
+    // Priority: First check if any form was submitted without video watched (even if skip is allowed)
     if (dayNumber > 1) {
-      // Check if user can skip to this day based on questionnaire answers
+      // ALWAYS check if any previous day has form submitted but video not watched
+      // This check takes priority over skip logic
+      const { hasIncompleteVideo, firstDayWithIncompleteVideo } = await checkPreviousDaysFormSubmittedButVideoNotWatched(
+        userId,
+        dayNumber,
+        findDailySessionByUserAndDay
+      );
+      
+      if (hasIncompleteVideo && firstDayWithIncompleteVideo) {
+        return sendPreviousDayVideoNotCompletedError(res, firstDayWithIncompleteVideo);
+      }
+      
+      // If no form submitted with incomplete video, check skip logic
       let canSkip = false;
       try {
         const userAnswer = await UserAnswer.findOne({ userId });
         if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
           canSkip = canSkipToDay(userAnswer.answers, dayNumber);
-          console.log(`[Skip Check] User ${userId}, Day ${dayNumber}, CanSkip: ${canSkip}`, {
-            answers: userAnswer.answers.map(a => ({ questionId: a.questionId, selectedOption: a.selectedOption }))
-          });
-        } else {
-          console.log(`[Skip Check] User ${userId} has no answers or empty answers array`);
         }
       } catch (error) {
         // If error fetching user answers, continue with normal check
-        console.error("Error checking user answers for skip:", error);
       }
 
-      // Only check previous day if user cannot skip
+      // Only check all previous days' videos if user cannot skip
       if (!canSkip) {
-        const previousDayCompleted = await checkPreviousDayVideoCompleted(userId, dayNumber);
-        if (!previousDayCompleted) {
-          return sendPreviousDayVideoNotCompletedError(res);
+        // Check ALL previous days have videos completed
+        const { allCompleted, firstIncompleteDay } = await checkAllPreviousDaysVideosCompleted(userId, dayNumber);
+        
+        if (!allCompleted) {
+          return sendPreviousDayVideoNotCompletedError(res, firstIncompleteDay || undefined);
         }
-      } else {
-        console.log(`[Skip Check] User ${userId} allowed to skip to day ${dayNumber} based on symptoms`);
       }
     }
 
@@ -146,129 +157,101 @@ export const getSessions = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Validate video completion when day is provided (for non-admin users)
-    if (dayNum !== undefined && !isAdmin) {
-      // Check if video is completed for this day (required to access form)
-      const videoCompleted = await checkVideoCompletedForDay(targetUserId, dayNum);
-      
-      if (!videoCompleted) {
-        return res.status(200).json({
-          success: true,
-          data: [],
-          videoCompleted: false,
-          canSubmit: false,
-          message: "Please complete the video for this day before accessing the session form.",
-        });
-      }
-
-      // Check if previous day's video is completed (required to submit for day > 1)
-      // Allow skipping if user has symptoms that map to this day
-      if (dayNum > 1) {
-        // Check if user can skip to this day based on questionnaire answers
-        let canSkip = false;
-        try {
-          const userAnswer = await UserAnswer.findOne({ userId: targetUserId });
-          if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
-            canSkip = canSkipToDay(userAnswer.answers, dayNum);
-          }
-        } catch (error) {
-          // If error fetching user answers, continue with normal check
-          console.error("Error checking user answers for skip:", error);
-        }
-
-        // Only check previous day if user cannot skip
-        if (!canSkip) {
-          const previousDayCompleted = await checkPreviousDayVideoCompleted(targetUserId, dayNum);
-          if (!previousDayCompleted) {
-            return res.status(200).json({
-              success: true,
-              data: [],
-              videoCompleted: true,
-              canSubmit: false,
-              message: "Please complete the previous day's session video before starting a new session. Videos must be watched completely without skipping forward.",
-            });
-          }
-        }
-      }
-    }
-
     const result = await getDailySessions(params);
 
-    // Calculate canSubmit flag for non-admin users
-    let canSubmit: boolean | undefined;
-    let videoCompleted: boolean | undefined;
-
-    if (!isAdmin) {
+    // Group sessions by day and add videoCompleted and canSubmit for each day
+    // Always apply grouping for non-admin users
+    if (!isAdmin && result.data && Array.isArray(result.data)) {
       const sessions = result.data as any[];
       
-      // If day is provided, always check video completion status
-      if (dayNum !== undefined) {
-        // Always check video completion for the provided day
-        videoCompleted = await checkVideoCompletedForDay(targetUserId, dayNum);
-        
-        // Check if session exists for this day (form already submitted)
-        // Compare as numbers to ensure type matching
-        const sessionExists = sessions.some((s: any) => Number(s.day) === dayNum);
-        
-        if (sessionExists) {
-          // If session exists, user has already submitted the form, so canSubmit is true
-          canSubmit = true;
-        } else {
-          // No session exists, check if they can submit (video completion checks)
-          canSubmit = videoCompleted;
-          
-          if (dayNum > 1 && canSubmit) {
-            // Check if user can skip to this day based on questionnaire answers
-            let canSkip = false;
-            try {
-              const userAnswer = await UserAnswer.findOne({ userId: targetUserId });
-              if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
-                canSkip = canSkipToDay(userAnswer.answers, dayNum);
-              }
-            } catch (error) {
-              // If error fetching user answers, continue with normal check
-              console.error("Error checking user answers for skip:", error);
-            }
+      // Get user answers once for skip checking (used for multiple days)
+      let userAnswer: any = null;
+      try {
+        userAnswer = await UserAnswer.findOne({ userId: targetUserId });
+      } catch (error) {
+        // Error fetching user answers, continue without skip check
+      }
 
-            // Only check previous day if user cannot skip
-            if (!canSkip) {
-              canSubmit = await checkPreviousDayVideoCompleted(targetUserId, dayNum);
-            }
-          }
+      // Helper function to calculate canSubmit for a specific day
+      const calculateCanSubmit = async (day: number, sessionExists: boolean): Promise<boolean> => {
+        if (sessionExists) {
+          // Session already exists, so canSubmit is true (already submitted)
+          return true;
         }
-      } else {
-        // If no day provided, check if user has any completed sessions
-        // If they have sessions, canSubmit should be true (they can proceed)
-        if (sessions.length > 0) {
-          // User has completed at least one session, so canSubmit is true
-          canSubmit = true;
+        
+        if (day === 1) {
+          // Day 1 can always be submitted
+          return true;
+        }
+        
+        // Check if user can skip to this day
+        let canSkip = false;
+        if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
+          canSkip = canSkipToDay(userAnswer.answers, day);
+        }
+        
+        if (canSkip) {
+          return true;
+        }
+        
+        // Check if previous day's video is completed
+        return await checkPreviousDayVideoCompleted(targetUserId, day);
+      };
+
+      // Group sessions by day
+      const sessionsByDay = new Map<number, any[]>();
+      sessions.forEach((session: any) => {
+        const day = Number(session.day);
+        if (!sessionsByDay.has(day)) {
+          sessionsByDay.set(day, []);
+        }
+        sessionsByDay.get(day)!.push(session);
+      });
+
+      // Process each day to add videoCompleted and canSubmit
+      const daysWithFlags = await Promise.all(
+        Array.from(sessionsByDay.entries()).map(async ([day, daySessions]) => {
+          // CHECK 1: videoCompleted for this specific day (independent check)
+          const videoCompleted = await checkVideoCompletedForDay(targetUserId, day);
           
-          // Check video completion for the first day in the sessions (or most recent)
-          // Get the day from the first session or the day with the most recent session
-          const firstSessionDay = sessions[0]?.day ? Number(sessions[0].day) : undefined;
-          if (firstSessionDay !== undefined) {
-            videoCompleted = await checkVideoCompletedForDay(targetUserId, firstSessionDay);
-          }
+          // CHECK 2: canSubmit for this specific day (independent check)
+          const canSubmit = await calculateCanSubmit(day, daySessions.length > 0);
           
-          // Also check if they can submit the next day
-          const maxDay = Math.max(...sessions.map((s: any) => s.day || 0));
-          const nextDay = maxDay + 1;
+          // Extract answers from the first session (if exists)
+          const answers = daySessions.length > 0 ? (daySessions[0].answers || []) : [];
           
-          if (nextDay <= 42) {
-            // Check if next day's video is completed (for submitting next day)
-            const nextDayVideoCompleted = await checkVideoCompletedForDay(targetUserId, nextDay);
-            const currentDayVideoCompleted = await checkVideoCompletedForDay(targetUserId, maxDay);
-            
-            // canSubmit remains true if they have sessions, but we can add nextDayCanSubmit if needed
-            // For now, canSubmit = true means they can proceed with their completed days
-          }
-        } else {
-          // No sessions yet, check if they can submit day 1
-          const day1VideoCompleted = await checkVideoCompletedForDay(targetUserId, 1);
-          canSubmit = day1VideoCompleted;
-          videoCompleted = day1VideoCompleted;
+          return {
+            day,
+            videoCompleted,
+            canSubmit,
+            answers,
+          };
+        })
+      );
+
+      // If a specific day was requested but no session exists, add it with flags
+      if (dayNum !== undefined) {
+        const dayExists = daysWithFlags.some((d: any) => d.day === dayNum);
+        
+        if (!dayExists) {
+          // No session for this day, check flags independently
+          const videoCompleted = await checkVideoCompletedForDay(targetUserId, dayNum);
+          const canSubmit = await calculateCanSubmit(dayNum, false); // No session exists
+          
+          // Add entry with flags for the requested day (empty answers array)
+          daysWithFlags.push({
+            day: dayNum,
+            videoCompleted,
+            canSubmit,
+            answers: [],
+          });
         }
       }
+
+      // Sort by day number
+      daysWithFlags.sort((a: any, b: any) => a.day - b.day);
+
+      result.data = daysWithFlags;
     }
 
     // Build response
@@ -276,20 +259,6 @@ export const getSessions = async (req: AuthRequest, res: Response) => {
       success: result.success,
       data: result.data,
     };
-
-    if (!isAdmin) {
-      // Always include videoCompleted when day is provided, otherwise include if checked
-      if (dayNum !== undefined) {
-        // When day is provided, always include videoCompleted (even if false)
-        response.videoCompleted = videoCompleted !== undefined ? videoCompleted : false;
-      } else if (videoCompleted !== undefined) {
-        // When no day provided but videoCompleted was checked, include it
-        response.videoCompleted = videoCompleted;
-      }
-      if (canSubmit !== undefined) {
-        response.canSubmit = canSubmit;
-      }
-    }
 
     res.status(200).json(response);
   } catch (error) {

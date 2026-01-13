@@ -156,3 +156,63 @@ export const checkPreviousDayVideoCompleted = async (userId: string, currentDay:
   const previousDay = currentDay - 1;
   return await checkVideoCompletedForDay(userId, previousDay);
 };
+
+/**
+ * Check if ALL previous days (from day 1 to currentDay - 1) have their videos completed
+ * @param userId - User ID
+ * @param currentDay - Current day number
+ * @returns Object with { allCompleted: boolean, firstIncompleteDay: number | null }
+ */
+export const checkAllPreviousDaysVideosCompleted = async (
+  userId: string,
+  currentDay: number
+): Promise<{ allCompleted: boolean; firstIncompleteDay: number | null }> => {
+  if (currentDay <= 1) {
+    return { allCompleted: true, firstIncompleteDay: null };
+  }
+
+  // Check all days from 1 to (currentDay - 1)
+  for (let day = 1; day < currentDay; day++) {
+    const isCompleted = await checkVideoCompletedForDay(userId, day);
+    if (!isCompleted) {
+      return { allCompleted: false, firstIncompleteDay: day };
+    }
+  }
+
+  return { allCompleted: true, firstIncompleteDay: null };
+};
+
+/**
+ * Check if any previous day has a submitted form but video not completed
+ * @param userId - User ID
+ * @param currentDay - Current day number
+ * @param findDailySessionByUserAndDay - Function to find daily session by user and day
+ * @returns Object with { hasIncompleteVideo: boolean, firstDayWithIncompleteVideo: number | null }
+ */
+export const checkPreviousDaysFormSubmittedButVideoNotWatched = async (
+  userId: string,
+  currentDay: number,
+  findDailySessionByUserAndDay: (userId: string, day: number) => Promise<any>
+): Promise<{ hasIncompleteVideo: boolean; firstDayWithIncompleteVideo: number | null }> => {
+  if (currentDay <= 1) {
+    return { hasIncompleteVideo: false, firstDayWithIncompleteVideo: null };
+  }
+
+  // Check all days from 1 to (currentDay - 1)
+  for (let day = 1; day < currentDay; day++) {
+    // Check if form was submitted for this day
+    const session = await findDailySessionByUserAndDay(userId, day);
+    
+    if (session) {
+      // Form was submitted, check if video is completed
+      const videoCompleted = await checkVideoCompletedForDay(userId, day);
+      
+      if (!videoCompleted) {
+        // Form submitted but video not watched
+        return { hasIncompleteVideo: true, firstDayWithIncompleteVideo: day };
+      }
+    }
+  }
+
+  return { hasIncompleteVideo: false, firstDayWithIncompleteVideo: null };
+};

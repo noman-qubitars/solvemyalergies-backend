@@ -112,4 +112,3 @@ export const getDailySessionByDay = async (userId: string, day: number) => {
     }))
   };
 };
-
