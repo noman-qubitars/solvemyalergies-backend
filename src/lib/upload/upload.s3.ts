@@ -12,6 +12,9 @@ if (isS3Configured()) {
   // Build S3 client config
   const s3ClientConfig: any = {
     region: config.s3.AWS_REGION,
+     // Disable checksums for presigned URLs to avoid client-side calculation requirements
+     requestChecksumCalculation: 'never',
+     responseChecksumValidation: 'never',
   };
 
   // Only add explicit credentials if they're provided
