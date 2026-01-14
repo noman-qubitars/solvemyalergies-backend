@@ -16,6 +16,25 @@ const setFfmpegPath = () => {
       ffmpeg.setFfmpegPath(ffmpegPath);
       return true;
     }
+  } else if (process.platform === "linux") {
+    // On Linux/Ubuntu, try common FFmpeg paths
+    const commonPaths = [
+      "/usr/bin/ffmpeg",
+      "/usr/local/bin/ffmpeg",
+      "/opt/ffmpeg/bin/ffmpeg",
+    ];
+    
+    for (const ffmpegPath of commonPaths) {
+      if (fs.existsSync(ffmpegPath)) {
+        ffmpeg.setFfmpegPath(ffmpegPath);
+        console.log(`✅ FFmpeg found at: ${ffmpegPath}`);
+        return true;
+      }
+    }
+    
+    // If not found, try to use system PATH (ffmpeg should be in PATH if installed)
+    console.log("⚠️  FFmpeg path not explicitly set, using system PATH");
+    return false;
   }
   return false;
 };
@@ -23,12 +42,20 @@ const setFfmpegPath = () => {
 export const generateThumbnail = (videoPath: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     try {
+      console.log(`🖼️  Starting thumbnail generation for: ${videoPath}`);
+      
+      // Check if video file exists
+      if (!fs.existsSync(videoPath)) {
+        throw new Error(`Video file not found: ${videoPath}`);
+      }
 
       setFfmpegPath();
       const videoName = path.basename(videoPath, path.extname(videoPath));
       const thumbnailFilename = `${videoName.replace(/\s+/g, '-')}-${Date.now()}.jpg`;
       const tempDir = os.tmpdir();
       const tempThumbnailPath = path.join(tempDir, thumbnailFilename);
+
+      console.log(`📸 Generating thumbnail to: ${tempThumbnailPath}`);
 
       ffmpeg(videoPath)
         .screenshots({
@@ -37,12 +64,24 @@ export const generateThumbnail = (videoPath: string): Promise<string> => {
           folder: tempDir,
           size: "320x240"
         })
+        .on("start", (commandLine) => {
+          console.log(`🎬 FFmpeg command: ${commandLine}`);
+        })
         .on("end", async () => {
           try {
+            console.log(`✅ Thumbnail generated at: ${tempThumbnailPath}`);
+            
+            // Check if thumbnail file was created
+            if (!fs.existsSync(tempThumbnailPath)) {
+              throw new Error("Thumbnail file was not created");
+            }
+
             // Upload to S3 - S3 is required
             if (isS3Configured() && s3Client && config.s3.S3_BUCKET_NAME) {
+              console.log("📤 Uploading thumbnail to S3...");
               // Read the generated thumbnail file
               const thumbnailBuffer = fs.readFileSync(tempThumbnailPath);
+              console.log(`📦 Thumbnail size: ${thumbnailBuffer.length} bytes`);
               
               // Upload to S3
               const s3Key = `uploads/thumbnails/${thumbnailFilename}`;
@@ -54,13 +93,14 @@ export const generateThumbnail = (videoPath: string): Promise<string> => {
               });
               
               await s3Client.send(uploadCommand);
+              console.log(`✅ Thumbnail uploaded to S3: ${s3Key}`);
               
               // Clean up temporary file
               fs.unlinkSync(tempThumbnailPath);
               
               // Return S3 URL
               const thumbnailUrl = getS3Url(s3Key);
-              console.log(`✅ Thumbnail generated and uploaded to S3: ${thumbnailUrl}`);
+              console.log(`✅ Thumbnail URL: ${thumbnailUrl}`);
               resolve(thumbnailUrl);
             } else {
               // S3 is required - throw error if not configured
@@ -72,17 +112,23 @@ export const generateThumbnail = (videoPath: string): Promise<string> => {
             if (fs.existsSync(tempThumbnailPath)) {
               fs.unlinkSync(tempThumbnailPath);
             }
-            console.error("❌ Thumbnail generation error:", error.message);
+            console.error("❌ Thumbnail upload error:", error.message);
+            console.error("Error stack:", error.stack);
             reject(new Error(`Failed to process thumbnail: ${error.message}`));
           }
         })
         .on("error", (err) => {
           console.error("❌ FFmpeg Error:", err.message);
-          console.error("Make sure FFmpeg is installed: https://ffmpeg.org/download.html");
+          console.error("Error code:", err.code);
+          console.error("Error stack:", err.stack);
+          console.error("⚠️  Make sure FFmpeg is installed on the server:");
+          console.error("   Ubuntu/Debian: sudo apt-get update && sudo apt-get install -y ffmpeg");
+          console.error("   CentOS/RHEL: sudo yum install -y ffmpeg");
           reject(new Error(`FFmpeg error: ${err.message}`));
         });
     } catch (error: any) {
-      console.error("❌ Thumbnail generation error:", error.message);
+      console.error("❌ Thumbnail generation setup error:", error.message);
+      console.error("Error stack:", error.stack);
       reject(error);
     }
   });
