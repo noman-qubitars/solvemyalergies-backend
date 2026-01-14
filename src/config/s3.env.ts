@@ -17,11 +17,13 @@ export const s3Config = s3EnvSchema.parse({
 });
 
 // Check if S3 is fully configured
+// Supports both IAM roles (no credentials needed) and explicit credentials
 export const isS3Configured = (): boolean => {
+  // S3 is configured if we have bucket name and region
+  // Credentials can come from IAM role (automatic) or explicit env vars
   return !!(
-    s3Config.AWS_ACCESS_KEY_ID &&
-    s3Config.AWS_SECRET_ACCESS_KEY &&
-    s3Config.S3_BUCKET_NAME
+    s3Config.S3_BUCKET_NAME &&
+    s3Config.AWS_REGION
   );
 };
 

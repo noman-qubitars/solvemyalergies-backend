@@ -4,6 +4,8 @@ import {
   getVideos,
   updateVideo,
   deleteVideo,
+  initiateUploadVideo,
+  completeUploadVideo,
 } from "./educationalVideo.controller";
 import {
   toggleFavorite,
@@ -11,10 +13,14 @@ import {
 } from "./educationalVideo.favorites.controller";
 import { authenticate, requireRole, requireNotRole, conditionalAuthForVideos } from "../../middleware/auth";
 import { uploadVideo } from "../../lib/upload";
+import { validate } from "../../lib/validation/validateRequest";
+import { initiateUploadSchema, completeUploadSchema } from "./educationalVideo.schemas";
 
 const educationalVideoRouter = Router();
 
 educationalVideoRouter.post("/", authenticate, requireRole("admin"), uploadVideo.single("video"), createVideo);
+educationalVideoRouter.post("/initiate-upload", authenticate, requireRole("admin"), validate(initiateUploadSchema), initiateUploadVideo);
+educationalVideoRouter.post("/complete-upload", authenticate, requireRole("admin"), validate(completeUploadSchema), completeUploadVideo);
 educationalVideoRouter.get("/favorites", authenticate, requireNotRole("admin"), getFavoriteVideos);
 educationalVideoRouter.get("/", conditionalAuthForVideos, getVideos);
 educationalVideoRouter.put("/:id/favorite", authenticate, requireNotRole("admin"), toggleFavorite);

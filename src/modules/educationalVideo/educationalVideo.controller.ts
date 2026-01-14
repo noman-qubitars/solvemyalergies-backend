@@ -20,7 +20,14 @@ import {
   deleteFileIfExists,
   buildUpdateData,
 } from "./helpers/educationalVideo.controller.utils";
-import { generateThumbnail } from "../../lib/generateThumbnail";
+import { generateThumbnail, downloadVideoFromS3 } from "../../lib/generateThumbnail";
+import {
+  initiateMultipartUpload,
+  completeMultipartUpload,
+  abortMultipartUpload,
+} from "../../lib/upload/upload.multipart";
+import ffmpeg from "fluent-ffmpeg";
+import fs from "fs";
 
 export const createVideo = async (req: AuthRequest, res: Response) => {
   try {
@@ -229,5 +236,114 @@ export const deleteVideo = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     return handleEducationalVideoError(res, error, "Failed to delete educational video", 500);
+  }
+};
+
+// Initiate multipart upload for chunked video upload
+export const initiateUploadVideo = async (req: AuthRequest, res: Response) => {
+  try {
+    const { filename, mimetype, totalSize } = req.body;
+
+    if (!filename || !mimetype || !totalSize) {
+      return res.status(400).json({
+        success: false,
+        message: "Filename, mimetype, and totalSize are required",
+      });
+    }
+
+    const uploadInfo = await initiateMultipartUpload(
+      filename,
+      mimetype,
+      totalSize,
+      "videos"
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Multipart upload initiated successfully",
+      data: uploadInfo,
+    });
+  } catch (error: any) {
+    return handleEducationalVideoError(res, error, "Failed to initiate multipart upload", 500);
+  }
+};
+
+// Complete multipart upload and create video record
+export const completeUploadVideo = async (req: AuthRequest, res: Response) => {
+  try {
+    const { uploadId, key, parts, title, description, status } = req.body;
+
+    if (!uploadId || !key || !parts || !title) {
+      return res.status(400).json({
+        success: false,
+        message: "uploadId, key, parts, and title are required",
+      });
+    }
+
+    // Complete the multipart upload in S3
+    const videoUrl = await completeMultipartUpload(uploadId, key, parts);
+
+    // Download video temporarily for processing (thumbnail)
+    let tempVideoPath: string | null = null;
+    let thumbnailUrl: string | undefined;
+
+    try {
+      // Download from S3 for processing
+      tempVideoPath = await downloadVideoFromS3(key);
+
+      // Generate thumbnail
+      try {
+        thumbnailUrl = await generateThumbnail(tempVideoPath);
+      } catch (thumbnailError: any) {
+        console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
+      }
+    } catch (downloadError: any) {
+      console.error("Failed to download video from S3 for processing:", downloadError);
+    } finally {
+      // Clean up temp file
+      if (tempVideoPath) {
+        try {
+          if (fs.existsSync(tempVideoPath)) {
+            fs.unlinkSync(tempVideoPath);
+          }
+        } catch (cleanupError) {
+          console.error("Failed to cleanup temp video file:", cleanupError);
+        }
+      }
+    }
+
+    // Get file info from S3
+    const fileName = key.split('/').pop() || 'video';
+    const fileSize = 0; // Could fetch from S3 if needed
+    const mimeType = 'video/mp4'; // Default, could be determined from filename
+
+    // Create video record
+    const video = await createEducationalVideo({
+      title,
+      description: description || "",
+      videoUrl,
+      thumbnailUrl,
+      fileName,
+      fileSize,
+      mimeType,
+      status: parseVideoStatus(status) || "uploaded",
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Educational video uploaded and created successfully",
+      data: video,
+    });
+  } catch (error: any) {
+    // Try to abort the upload if completion failed
+    try {
+      if (req.body.uploadId && req.body.key) {
+        await abortMultipartUpload(req.body.uploadId, req.body.key);
+      }
+    } catch (abortError) {
+      console.error("Failed to abort multipart upload:", abortError);
+    }
+
+    return handleEducationalVideoError(res, error, "Failed to complete multipart upload", 500);
   }
 };

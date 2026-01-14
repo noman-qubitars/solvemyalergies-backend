@@ -1,14 +1,4 @@
-import multer from "multer";
 import path from "path";
-import fs from "fs";
-
-export const getUploadsDir = () => path.join(process.cwd(), "uploads");
-
-export const ensureDirectoryExists = (dirPath: string) => {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-};
 
 export const getSubfolderByMimeType = (mimetype: string): string => {
   if (mimetype.startsWith("image/")) {
@@ -29,13 +19,4 @@ export const generateUniqueFilename = (originalname: string): string => {
   const ext = path.extname(originalname);
   const name = path.basename(originalname, ext);
   return `${name}-${uniqueSuffix}${ext}`;
-};
-
-export const createStorage = (destination: (req: any, file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => void) => {
-  return multer.diskStorage({
-    destination,
-    filename: (_req, file, cb) => {
-      cb(null, generateUniqueFilename(file.originalname));
-    },
-  });
 };

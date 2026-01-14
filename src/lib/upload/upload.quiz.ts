@@ -1,21 +1,12 @@
 import multer from "multer";
 import multerS3 from "multer-s3";
-import path from "path";
 import { ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES, FILE_SIZE_LIMITS } from "./upload.constants";
 import { s3Client, createS3Storage } from "./upload.s3";
-import { isS3Configured } from "../../config/s3.env";
 import { config } from "../../config/env";
-import { generateUniqueFilename, createStorage, getUploadsDir, ensureDirectoryExists } from "./upload.utils";
+import { generateUniqueFilename } from "./upload.utils";
 
-// Use S3 storage if configured, otherwise fall back to local disk storage
-const quizImageStorage = isS3Configured()
-  ? createS3Storage("images")
-  : createStorage((_req, _file, cb) => {
-      const uploadsDir = getUploadsDir();
-      const folderPath = path.join(uploadsDir, "images");
-      ensureDirectoryExists(folderPath);
-      cb(null, folderPath);
-    });
+// Use S3 storage only - local storage is not supported
+const quizImageStorage = createS3Storage("images");
 
 const quizImageFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
@@ -47,33 +38,22 @@ const quizFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFil
   cb(null, true);
 };
 
-// Use S3 storage if configured, otherwise fall back to local disk storage
-const quizStorage = isS3Configured() && s3Client && config.s3.S3_BUCKET_NAME
-  ? multerS3({
-      s3: s3Client,
-      bucket: config.s3.S3_BUCKET_NAME,
-      acl: "public-read",
-      key: (_req: any, file: Express.Multer.File, cb: (error: Error | null, key: string) => void) => {
-        let subfolder = "documents";
-        if (file.mimetype === "application/pdf") {
-          subfolder = "pdfs";
-        }
-        const filename = generateUniqueFilename(file.originalname);
-        const key = `uploads/${subfolder}/${filename}`;
-        cb(null, key);
-      },
-      contentType: multerS3.AUTO_CONTENT_TYPE,
-    })
-  : createStorage((_req, file, cb) => {
-      const uploadsDir = getUploadsDir();
-      let subfolder = "documents";
-      if (file.mimetype === "application/pdf") {
-        subfolder = "pdfs";
-      }
-      const folderPath = path.join(uploadsDir, subfolder);
-      ensureDirectoryExists(folderPath);
-      cb(null, folderPath);
-    });
+// Use S3 storage only - local storage is not supported
+const quizStorage = multerS3({
+  s3: s3Client!,
+  bucket: config.s3.S3_BUCKET_NAME!,
+  acl: "public-read",
+  key: (_req: any, file: Express.Multer.File, cb: (error: Error | null, key: string) => void) => {
+    let subfolder = "documents";
+    if (file.mimetype === "application/pdf") {
+      subfolder = "pdfs";
+    }
+    const filename = generateUniqueFilename(file.originalname);
+    const key = `uploads/${subfolder}/${filename}`;
+    cb(null, key);
+  },
+  contentType: multerS3.AUTO_CONTENT_TYPE,
+});
 
 export const uploadQuiz = multer({
   storage: quizStorage,
@@ -101,53 +81,30 @@ const quizCombinedFilter = (_req: any, file: Express.Multer.File, cb: multer.Fil
   }
 };
 
-// Use S3 storage if configured, otherwise fall back to local disk storage
-const quizCombinedStorage = (() => {
-  if (isS3Configured() && s3Client && config.s3.S3_BUCKET_NAME) {
-    return multerS3({
-      s3: s3Client,
-      bucket: config.s3.S3_BUCKET_NAME,
-      acl: "public-read",
-      key: (_req: any, file: Express.Multer.File, cb: (error: Error | null, key: string) => void) => {
-        let subfolder = "documents";
-        
-        if (file.fieldname === 'photo') {
-          subfolder = "images";
-        } else if (file.fieldname === 'file') {
-          if (file.mimetype === "application/pdf") {
-            subfolder = "pdfs";
-          } else {
-            subfolder = "documents";
-          }
-        }
-        
-        const filename = generateUniqueFilename(file.originalname);
-        const key = `uploads/${subfolder}/${filename}`;
-        cb(null, key);
-      },
-      contentType: multerS3.AUTO_CONTENT_TYPE,
-    });
-  } else {
-    return createStorage((_req, file, cb) => {
-      const uploadsDir = getUploadsDir();
-      let subfolder = "documents";
-      
-      if (file.fieldname === 'photo') {
-        subfolder = "images";
-      } else if (file.fieldname === 'file') {
-        if (file.mimetype === "application/pdf") {
-          subfolder = "pdfs";
-        } else {
-          subfolder = "documents";
-        }
+// Use S3 storage only - local storage is not supported
+const quizCombinedStorage = multerS3({
+  s3: s3Client!,
+  bucket: config.s3.S3_BUCKET_NAME!,
+  acl: "public-read",
+  key: (_req: any, file: Express.Multer.File, cb: (error: Error | null, key: string) => void) => {
+    let subfolder = "documents";
+    
+    if (file.fieldname === 'photo') {
+      subfolder = "images";
+    } else if (file.fieldname === 'file') {
+      if (file.mimetype === "application/pdf") {
+        subfolder = "pdfs";
+      } else {
+        subfolder = "documents";
       }
-      
-      const folderPath = path.join(uploadsDir, subfolder);
-      ensureDirectoryExists(folderPath);
-      cb(null, folderPath);
-    });
-  }
-})();
+    }
+    
+    const filename = generateUniqueFilename(file.originalname);
+    const key = `uploads/${subfolder}/${filename}`;
+    cb(null, key);
+  },
+  contentType: multerS3.AUTO_CONTENT_TYPE,
+});
 
 const uploadQuizCombined = multer({
   storage: quizCombinedStorage,

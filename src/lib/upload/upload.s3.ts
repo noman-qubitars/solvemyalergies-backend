@@ -9,13 +9,21 @@ import { getSubfolderByMimeType } from "./upload.utils";
 let s3Client: S3Client | null = null;
 
 if (isS3Configured()) {
-  s3Client = new S3Client({
+  // Build S3 client config
+  const s3ClientConfig: any = {
     region: config.s3.AWS_REGION,
-    credentials: {
-      accessKeyId: config.s3.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: config.s3.AWS_SECRET_ACCESS_KEY!,
-    },
-  });
+  };
+
+  // Only add explicit credentials if they're provided
+  // If not provided, SDK will automatically use IAM role credentials
+  if (config.s3.AWS_ACCESS_KEY_ID && config.s3.AWS_SECRET_ACCESS_KEY) {
+    s3ClientConfig.credentials = {
+      accessKeyId: config.s3.AWS_ACCESS_KEY_ID,
+      secretAccessKey: config.s3.AWS_SECRET_ACCESS_KEY,
+    };
+  }
+
+  s3Client = new S3Client(s3ClientConfig);
 }
 
 // Get S3 bucket URL (with or without custom domain)
@@ -29,7 +37,7 @@ const getS3BucketUrl = () => {
 // Create S3 storage for multer (only if S3 is configured)
 export const createS3Storage = (subfolder?: string) => {
   if (!isS3Configured() || !s3Client || !config.s3.S3_BUCKET_NAME) {
-    throw new Error("S3 is not configured. Please set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME environment variables.");
+    throw new Error("S3 is not configured. Please set S3_BUCKET_NAME and AWS_REGION environment variables.");
   }
   return multerS3({
     s3: s3Client,

@@ -1,18 +1,4 @@
-import path from "path";
-import { getUploadsDir, ensureDirectoryExists } from "./upload.utils";
-import { isS3Configured } from "../../config/s3.env";
-
-// Only create directories if S3 is not configured (local development)
-if (!isS3Configured()) {
-  const uploadsDir = getUploadsDir();
-  const profileDir = path.join(uploadsDir, "profile");
-  const thumbnailsDir = path.join(uploadsDir, "thumbnails");
-
-  ensureDirectoryExists(uploadsDir);
-  ensureDirectoryExists(profileDir);
-  ensureDirectoryExists(thumbnailsDir);
-}
-
+// All uploads are stored in S3 - no local directory creation needed
 export { upload } from "./upload.general";
 export { uploadVideo } from "./upload.video";
 export { uploadProfileImage } from "./upload.profile";

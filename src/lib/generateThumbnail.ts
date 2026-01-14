@@ -8,8 +8,6 @@ import { config } from "../config/env";
 import { isS3Configured } from "../config/s3.env";
 
 const setFfmpegPath = () => {
-  // For Linux/EC2, ffmpeg should be in PATH
-  // For Windows development, keep the existing logic
   if (process.platform === "win32") {
     const username = os.userInfo().username;
     const ffmpegPath = `C:\\Users\\${username}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.0.1-full_build\\bin\\ffmpeg.exe`;
@@ -25,12 +23,10 @@ const setFfmpegPath = () => {
 export const generateThumbnail = (videoPath: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     try {
+
       setFfmpegPath();
-      
       const videoName = path.basename(videoPath, path.extname(videoPath));
       const thumbnailFilename = `${videoName.replace(/\s+/g, '-')}-${Date.now()}.jpg`;
-      
-      // Create temporary directory for thumbnail
       const tempDir = os.tmpdir();
       const tempThumbnailPath = path.join(tempDir, thumbnailFilename);
 
@@ -43,7 +39,7 @@ export const generateThumbnail = (videoPath: string): Promise<string> => {
         })
         .on("end", async () => {
           try {
-            // If S3 is configured, upload to S3, otherwise save locally
+            // Upload to S3 - S3 is required
             if (isS3Configured() && s3Client && config.s3.S3_BUCKET_NAME) {
               // Read the generated thumbnail file
               const thumbnailBuffer = fs.readFileSync(tempThumbnailPath);
@@ -68,16 +64,9 @@ export const generateThumbnail = (videoPath: string): Promise<string> => {
               console.log(`✅ Thumbnail generated and uploaded to S3: ${thumbnailUrl}`);
               resolve(thumbnailUrl);
             } else {
-              // Save locally
-              const thumbnailsDir = path.join(process.cwd(), "uploads", "thumbnails");
-              if (!fs.existsSync(thumbnailsDir)) {
-                fs.mkdirSync(thumbnailsDir, { recursive: true });
-              }
-              const localThumbnailPath = path.join(thumbnailsDir, thumbnailFilename);
-              fs.renameSync(tempThumbnailPath, localThumbnailPath);
-              const thumbnailUrl = `/uploads/thumbnails/${encodeURIComponent(thumbnailFilename)}`;
-              console.log(`✅ Thumbnail generated successfully: ${thumbnailUrl}`);
-              resolve(thumbnailUrl);
+              // S3 is required - throw error if not configured
+              fs.unlinkSync(tempThumbnailPath);
+              throw new Error("S3 is not configured. Thumbnails must be stored in S3.");
             }
           } catch (error: any) {
             // Clean up temporary file even on error

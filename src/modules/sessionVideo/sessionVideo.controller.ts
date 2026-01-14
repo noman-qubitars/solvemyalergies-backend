@@ -12,6 +12,11 @@ import { UserAnswer } from "../../models/UserAnswer";
 import { VideoWatchTrackingModel } from "../../models/VideoWatchTracking";
 import { SessionVideo } from "../../models/SessionVideo";
 import { generateThumbnail, downloadVideoFromS3 } from "../../lib/generateThumbnail";
+import {
+  initiateMultipartUpload,
+  completeMultipartUpload,
+  abortMultipartUpload,
+} from "../../lib/upload/upload.multipart";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs";
 import path from "path";
@@ -471,6 +476,172 @@ export const deleteVideo = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || "Failed to delete session video",
+    });
+  }
+};
+
+// Initiate multipart upload for chunked video upload
+export const initiateUploadVideo = async (req: AuthRequest, res: Response) => {
+  try {
+    const { filename, mimetype, totalSize } = req.body;
+
+    if (!filename || !mimetype || !totalSize) {
+      return res.status(400).json({
+        success: false,
+        message: "Filename, mimetype, and totalSize are required",
+      });
+    }
+
+    const uploadInfo = await initiateMultipartUpload(
+      filename,
+      mimetype,
+      totalSize,
+      "videos"
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Multipart upload initiated successfully",
+      data: uploadInfo,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to initiate multipart upload",
+    });
+  }
+};
+
+// Complete multipart upload and create video record
+export const completeUploadVideo = async (req: AuthRequest, res: Response) => {
+  try {
+    const { uploadId, key, parts, title, description, symptoms, status } = req.body;
+
+    if (!uploadId || !key || !parts || !title) {
+      return res.status(400).json({
+        success: false,
+        message: "uploadId, key, parts, and title are required",
+      });
+    }
+
+    // Complete the multipart upload in S3
+    const videoUrl = await completeMultipartUpload(uploadId, key, parts);
+
+    // Parse symptoms
+    let symptomsArray: string[] = [];
+    if (symptoms) {
+      if (typeof symptoms === 'string') {
+        try {
+          symptomsArray = JSON.parse(symptoms);
+        } catch {
+          symptomsArray = symptoms.split(",").map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+        }
+      } else if (Array.isArray(symptoms)) {
+        symptomsArray = symptoms;
+      }
+    }
+
+    // Download video temporarily for processing (duration and thumbnail)
+    let tempVideoPath: string | null = null;
+    let videoDuration: number | undefined;
+    let thumbnailUrl: string | undefined;
+
+    try {
+      // Download from S3 for processing
+      tempVideoPath = await downloadVideoFromS3(key);
+
+      // Extract video duration
+      try {
+        videoDuration = await new Promise<number>((resolve, reject) => {
+          ffmpeg.ffprobe(tempVideoPath!, (err, metadata) => {
+            if (err) {
+              console.error("Error extracting video duration:", err);
+              reject(err);
+            } else {
+              let duration: number | undefined;
+              if (metadata.streams && metadata.streams.length > 0) {
+                const videoStream = metadata.streams.find((s: any) => s.codec_type === 'video');
+                if (videoStream && videoStream.duration) {
+                  duration = parseFloat(videoStream.duration);
+                }
+              }
+              
+              if (!duration || isNaN(duration)) {
+                duration = metadata.format.duration;
+              }
+              
+              if (duration && !isNaN(duration)) {
+                resolve(Math.ceil(duration));
+              } else {
+                reject(new Error("Could not extract video duration"));
+              }
+            }
+          });
+        });
+      } catch (error) {
+        console.error("Failed to extract video duration:", error);
+        videoDuration = undefined;
+      }
+
+      // Generate thumbnail
+      try {
+        thumbnailUrl = await generateThumbnail(tempVideoPath);
+      } catch (thumbnailError: any) {
+        console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
+      }
+    } catch (downloadError: any) {
+      console.error("Failed to download video from S3 for processing:", downloadError);
+    } finally {
+      // Clean up temp file
+      if (tempVideoPath) {
+        try {
+          if (fs.existsSync(tempVideoPath)) {
+            fs.unlinkSync(tempVideoPath);
+          }
+        } catch (cleanupError) {
+          console.error("Failed to cleanup temp video file:", cleanupError);
+        }
+      }
+    }
+
+    // Get file info from S3 (we need to fetch it to get size and mimetype)
+    // For now, we'll use defaults - in production you might want to fetch from S3
+    const fileName = key.split('/').pop() || 'video';
+    const fileSize = 0; // Could fetch from S3 if needed
+    const mimeType = 'video/mp4'; // Default, could be determined from filename
+
+    // Create video record
+    const video = await createSessionVideo({
+      title,
+      description: description || "",
+      videoUrl,
+      fileName,
+      fileSize,
+      mimeType,
+      symptoms: symptomsArray,
+      status: status || "uploaded",
+      videoDuration,
+      thumbnailUrl,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Session video uploaded and created successfully",
+      data: video,
+    });
+  } catch (error: any) {
+    // Try to abort the upload if completion failed
+    try {
+      if (req.body.uploadId && req.body.key) {
+        await abortMultipartUpload(req.body.uploadId, req.body.key);
+      }
+    } catch (abortError) {
+      console.error("Failed to abort multipart upload:", abortError);
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to complete multipart upload",
     });
   }
 };
