@@ -117,14 +117,19 @@ export const generateThumbnail = (videoPath: string): Promise<string> => {
             reject(new Error(`Failed to process thumbnail: ${error.message}`));
           }
         })
-        .on("error", (err) => {
-          console.error("❌ FFmpeg Error:", err.message);
-          console.error("Error code:", err.code);
-          console.error("Error stack:", err.stack);
+        .on("error", (err: unknown) => {
+          const e = err as any;
+          console.error("❌ FFmpeg Error:", e?.message || String(err));
+          if (e?.code !== undefined) {
+            console.error("Error code:", e.code);
+          }
+          if (e?.stack) {
+            console.error("Error stack:", e.stack);
+          }
           console.error("⚠️  Make sure FFmpeg is installed on the server:");
           console.error("   Ubuntu/Debian: sudo apt-get update && sudo apt-get install -y ffmpeg");
           console.error("   CentOS/RHEL: sudo yum install -y ffmpeg");
-          reject(new Error(`FFmpeg error: ${err.message}`));
+          reject(new Error(`FFmpeg error: ${e?.message || String(err)}`));
         });
     } catch (error: any) {
       console.error("❌ Thumbnail generation setup error:", error.message);
