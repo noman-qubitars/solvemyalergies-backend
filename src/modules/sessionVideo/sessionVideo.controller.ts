@@ -17,6 +17,8 @@ import {
   completeMultipartUpload,
   abortMultipartUpload,
 } from "../../lib/upload/upload.multipart";
+import { deleteFromS3, getS3KeyFromUrl } from "../../lib/upload/upload.s3";
+import { isS3Configured } from "../../config/s3.env";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs";
 import path from "path";
@@ -455,7 +457,27 @@ export const deleteVideo = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    if (video.videoUrl) {
+    // Delete from S3 if configured
+    if (video.videoUrl && isS3Configured()) {
+      try {
+        // Delete video from S3
+        await deleteFromS3(video.videoUrl);
+        
+        // Delete thumbnail from S3 if exists
+        if (video.thumbnailUrl) {
+          try {
+            await deleteFromS3(video.thumbnailUrl);
+          } catch (thumbnailError) {
+            console.error("Failed to delete thumbnail from S3:", thumbnailError);
+            // Continue even if thumbnail deletion fails
+          }
+        }
+      } catch (s3Error) {
+        console.error("Failed to delete video from S3:", s3Error);
+        // Continue with database deletion even if S3 deletion fails
+      }
+    } else if (video.videoUrl) {
+      // Fallback to local file deletion if S3 is not configured
       const filePath = path.join(
         process.cwd(),
         "uploads",
@@ -548,14 +570,17 @@ export const completeUploadVideo = async (req: AuthRequest, res: Response) => {
 
     try {
       // Download from S3 for processing
+      console.log(`📥 Downloading video from S3 for processing: ${key}`);
       tempVideoPath = await downloadVideoFromS3(key);
+      console.log(`✅ Video downloaded to: ${tempVideoPath}`);
 
       // Extract video duration
       try {
+        console.log("⏱️  Extracting video duration...");
         videoDuration = await new Promise<number>((resolve, reject) => {
           ffmpeg.ffprobe(tempVideoPath!, (err, metadata) => {
             if (err) {
-              console.error("Error extracting video duration:", err);
+              console.error("❌ Error extracting video duration:", err);
               reject(err);
             } else {
               let duration: number | undefined;
@@ -571,6 +596,7 @@ export const completeUploadVideo = async (req: AuthRequest, res: Response) => {
               }
               
               if (duration && !isNaN(duration)) {
+                console.log(`✅ Video duration extracted: ${Math.ceil(duration)} seconds`);
                 resolve(Math.ceil(duration));
               } else {
                 reject(new Error("Could not extract video duration"));
@@ -578,28 +604,33 @@ export const completeUploadVideo = async (req: AuthRequest, res: Response) => {
             }
           });
         });
-      } catch (error) {
-        console.error("Failed to extract video duration:", error);
+      } catch (error: any) {
+        console.error("❌ Failed to extract video duration:", error.message);
         videoDuration = undefined;
       }
 
       // Generate thumbnail
       try {
+        console.log("🖼️  Generating thumbnail...");
         thumbnailUrl = await generateThumbnail(tempVideoPath);
+        console.log(`✅ Thumbnail generated: ${thumbnailUrl}`);
       } catch (thumbnailError: any) {
-        console.error("⚠️  Failed to generate thumbnail:", thumbnailError.message);
+        console.error("❌ Failed to generate thumbnail:", thumbnailError.message);
+        console.error("Thumbnail error stack:", thumbnailError.stack);
       }
     } catch (downloadError: any) {
-      console.error("Failed to download video from S3 for processing:", downloadError);
+      console.error("❌ Failed to download video from S3 for processing:", downloadError.message);
+      console.error("Download error stack:", downloadError.stack);
     } finally {
       // Clean up temp file
       if (tempVideoPath) {
         try {
           if (fs.existsSync(tempVideoPath)) {
             fs.unlinkSync(tempVideoPath);
+            console.log(`🧹 Cleaned up temp file: ${tempVideoPath}`);
           }
         } catch (cleanupError) {
-          console.error("Failed to cleanup temp video file:", cleanupError);
+          console.error("❌ Failed to cleanup temp video file:", cleanupError);
         }
       }
     }

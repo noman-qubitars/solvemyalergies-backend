@@ -1,5 +1,5 @@
 import multerS3 from "multer-s3";
-import { S3Client } from "@aws-sdk/client-s3";
+import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { config } from "../../config/env";
 import { isS3Configured } from "../../config/s3.env";
 import { generateUniqueFilename } from "./upload.utils";
@@ -78,6 +78,22 @@ export const getS3KeyFromUrl = (url: string): string => {
   // Fallback: try to extract from standard S3 URL format
   const match = url.match(/s3[^/]*\/[^/]+\/(.+)$/);
   return match ? match[1] : url;
+};
+
+// Delete object from S3
+export const deleteFromS3 = async (s3KeyOrUrl: string): Promise<void> => {
+  if (!isS3Configured() || !s3Client || !config.s3.S3_BUCKET_NAME) {
+    throw new Error("S3 is not configured");
+  }
+
+  const s3Key = getS3KeyFromUrl(s3KeyOrUrl);
+  
+  const deleteCommand = new DeleteObjectCommand({
+    Bucket: config.s3.S3_BUCKET_NAME,
+    Key: s3Key,
+  });
+
+  await s3Client.send(deleteCommand);
 };
 
 export { s3Client, getS3BucketUrl };
