@@ -51,7 +51,6 @@ export const generateThumbnail = (videoPath: string): Promise<string> => {
                 Key: s3Key,
                 Body: thumbnailBuffer,
                 ContentType: "image/jpeg",
-                ACL: "public-read",
               });
               
               await s3Client.send(uploadCommand);
