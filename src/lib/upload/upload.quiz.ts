@@ -42,7 +42,6 @@ const quizFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFil
 const quizStorage = multerS3({
   s3: s3Client!,
   bucket: config.s3.S3_BUCKET_NAME!,
-  acl: "public-read",
   key: (_req: any, file: Express.Multer.File, cb: (error: Error | null, key: string) => void) => {
     let subfolder = "documents";
     if (file.mimetype === "application/pdf") {
@@ -85,7 +84,6 @@ const quizCombinedFilter = (_req: any, file: Express.Multer.File, cb: multer.Fil
 const quizCombinedStorage = multerS3({
   s3: s3Client!,
   bucket: config.s3.S3_BUCKET_NAME!,
-  acl: "public-read",
   key: (_req: any, file: Express.Multer.File, cb: (error: Error | null, key: string) => void) => {
     let subfolder = "documents";
     

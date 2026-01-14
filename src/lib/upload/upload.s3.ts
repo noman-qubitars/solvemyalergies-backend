@@ -42,7 +42,6 @@ export const createS3Storage = (subfolder?: string) => {
   return multerS3({
     s3: s3Client,
     bucket: config.s3.S3_BUCKET_NAME,
-    acl: "public-read", // Make files publicly accessible
     key: (_req: any, file: Express.Multer.File, cb: (error: Error | null, key: string) => void) => {
       const folder = subfolder || getSubfolderByMimeType(file.mimetype);
       const filename = generateUniqueFilename(file.originalname);

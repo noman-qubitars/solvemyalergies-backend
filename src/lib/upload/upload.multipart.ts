@@ -58,7 +58,6 @@ export const initiateMultipartUpload = async (
     Bucket: config.s3.S3_BUCKET_NAME,
     Key: key,
     ContentType: mimetype,
-    ACL: "public-read",
   });
 
   const { UploadId } = await s3Client.send(createCommand);
