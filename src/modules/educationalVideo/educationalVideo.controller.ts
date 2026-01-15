@@ -26,6 +26,8 @@ import {
   completeMultipartUpload,
   abortMultipartUpload,
 } from "../../lib/upload/upload.multipart";
+import { deleteFromS3 } from "../../lib/upload/upload.s3";
+import { isS3Configured } from "../../config/s3.env";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs";
 
@@ -345,5 +347,168 @@ export const completeUploadVideo = async (req: AuthRequest, res: Response) => {
     }
 
     return handleEducationalVideoError(res, error, "Failed to complete multipart upload", 500);
+  }
+};
+
+// Initiate multipart upload for updating a video
+export const initiateUpdateUploadVideo = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { filename, mimetype, totalSize } = req.body;
+
+    // Verify video exists
+    const existingVideo = await getEducationalVideoById(id);
+    if (!existingVideo) {
+      return sendVideoNotFoundError(res);
+    }
+
+    if (!filename || !mimetype || !totalSize) {
+      return res.status(400).json({
+        success: false,
+        message: "Filename, mimetype, and totalSize are required",
+      });
+    }
+
+    const uploadInfo = await initiateMultipartUpload(
+      filename,
+      mimetype,
+      totalSize,
+      "videos"
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Multipart upload initiated successfully for update",
+      data: uploadInfo,
+    });
+  } catch (error: any) {
+    return handleEducationalVideoError(res, error, "Failed to initiate multipart upload for update", 500);
+  }
+};
+
+// Complete multipart upload and update video record
+export const completeUpdateUploadVideo = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { uploadId, key, parts, title, description, status } = req.body;
+
+    if (!uploadId || !key || !parts) {
+      return res.status(400).json({
+        success: false,
+        message: "uploadId, key, and parts are required",
+      });
+    }
+
+    // Verify video exists
+    const existingVideo = await getEducationalVideoById(id);
+    if (!existingVideo) {
+      return sendVideoNotFoundError(res);
+    }
+
+    // Delete old video from S3 if it exists
+    if (existingVideo.videoUrl && isS3Configured()) {
+      try {
+        await deleteFromS3(existingVideo.videoUrl);
+        console.log(`🗑️  Deleted old video from S3: ${existingVideo.videoUrl}`);
+      } catch (deleteError: any) {
+        console.error("⚠️  Failed to delete old video from S3:", deleteError.message);
+        // Continue with update even if deletion fails
+      }
+    }
+
+    // Delete old thumbnail from S3 if it exists
+    if (existingVideo.thumbnailUrl && isS3Configured()) {
+      try {
+        await deleteFromS3(existingVideo.thumbnailUrl);
+        console.log(`🗑️  Deleted old thumbnail from S3: ${existingVideo.thumbnailUrl}`);
+      } catch (deleteError: any) {
+        console.error("⚠️  Failed to delete old thumbnail from S3:", deleteError.message);
+        // Continue with update even if deletion fails
+      }
+    }
+
+    // Complete the multipart upload in S3
+    const videoUrl = await completeMultipartUpload(uploadId, key, parts);
+
+    // Download video temporarily for processing (thumbnail)
+    let tempVideoPath: string | null = null;
+    let thumbnailUrl: string | undefined;
+
+    try {
+      // Download from S3 for processing
+      console.log(`📥 Downloading video from S3 for processing: ${key}`);
+      tempVideoPath = await downloadVideoFromS3(key);
+      console.log(`✅ Video downloaded to: ${tempVideoPath}`);
+
+      // Generate thumbnail
+      try {
+        console.log("🖼️  Generating thumbnail...");
+        thumbnailUrl = await generateThumbnail(tempVideoPath);
+        console.log(`✅ Thumbnail generated: ${thumbnailUrl}`);
+      } catch (thumbnailError: any) {
+        console.error("❌ Failed to generate thumbnail:", thumbnailError.message);
+        console.error("Thumbnail error stack:", thumbnailError.stack);
+      }
+    } catch (downloadError: any) {
+      console.error("❌ Failed to download video from S3 for processing:", downloadError.message);
+      console.error("Download error stack:", downloadError.stack);
+    } finally {
+      // Clean up temp file
+      if (tempVideoPath) {
+        try {
+          if (fs.existsSync(tempVideoPath)) {
+            fs.unlinkSync(tempVideoPath);
+            console.log(`🧹 Cleaned up temp file: ${tempVideoPath}`);
+          }
+        } catch (cleanupError) {
+          console.error("❌ Failed to cleanup temp video file:", cleanupError);
+        }
+      }
+    }
+
+    // Get file info from S3
+    const fileName = key.split('/').pop() || 'video';
+    const fileSize = 0; // Could fetch from S3 if needed
+    const mimeType = 'video/mp4'; // Default, could be determined from filename
+
+    // Prepare update data
+    const updateData: any = {
+      videoUrl,
+      fileName,
+      fileSize,
+      mimeType,
+    };
+
+    if (title) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (status) {
+      const parsedStatus = parseVideoStatus(status);
+      if (parsedStatus) updateData.status = parsedStatus;
+    }
+    if (thumbnailUrl) updateData.thumbnailUrl = thumbnailUrl;
+
+    // Update video record
+    const video = await updateEducationalVideo(id, updateData);
+
+    if (!video) {
+      return sendVideoNotFoundError(res);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Educational video updated successfully",
+      data: video,
+    });
+  } catch (error: any) {
+    // Try to abort the upload if completion failed
+    try {
+      if (req.body.uploadId && req.body.key) {
+        await abortMultipartUpload(req.body.uploadId, req.body.key);
+      }
+    } catch (abortError) {
+      console.error("Failed to abort multipart upload:", abortError);
+    }
+
+    return handleEducationalVideoError(res, error, "Failed to complete multipart upload for update", 500);
   }
 };

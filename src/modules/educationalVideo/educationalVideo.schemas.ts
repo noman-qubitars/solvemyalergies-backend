@@ -32,3 +32,16 @@ export const completeUploadSchema = z.object({
   status: z.enum(["uploaded", "draft"]).default("uploaded"),
 });
 
+export const completeUpdateUploadSchema = z.object({
+  uploadId: z.string().min(1, "Upload ID is required"),
+  key: z.string().min(1, "Key is required"),
+  parts: z.array(
+    z.object({
+      partNumber: z.number().int().positive("Part number must be positive"),
+      etag: z.string().min(1, "ETag is required"),
+    })
+  ).min(1, "At least one part is required"),
+  title: z.string().min(1, "Title is required").optional(),
+  description: z.string().optional(),
+  status: z.enum(["uploaded", "draft"]).optional(),
+});
