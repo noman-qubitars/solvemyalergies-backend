@@ -1,7 +1,6 @@
 import { Server as SocketServer } from "socket.io";
 import { AuthenticatedSocket } from "../../lib/socket";
 import { createMessage } from "./message.service";
-import { User } from "../../models/User";
 
 export const setupMessageSocket = (io: SocketServer) => {
   io.on("connection", (socket: AuthenticatedSocket) => {

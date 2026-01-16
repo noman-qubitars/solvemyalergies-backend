@@ -21,4 +21,3 @@ export const handleProfileError = (res: Response, error: unknown) => {
     message: message
   });
 };
-

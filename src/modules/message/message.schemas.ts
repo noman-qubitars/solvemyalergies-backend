@@ -15,4 +15,3 @@ export const getMessagesSchema = z.object({
 export const markAsReadSchema = z.object({
   messageIds: z.array(z.string()).min(1, "At least one message ID is required"),
 });
-

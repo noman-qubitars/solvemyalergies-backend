@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import {
   createMessage,
   getMessages,
@@ -8,72 +8,49 @@ import {
   deleteAllMessagesByUserId,
 } from "./message.service";
 import { AuthRequest } from "../../middleware/auth";
-import { User } from "../../models/User";
-import { getSocketInstance } from "../../lib/socketInstance";
+import { validateMessageType, validateFileForMessage, validateMessageIds, validateUserId, validateMessageId } from "./helpers/messageValidation.helpers";
+import { extractFileInfo } from "./helpers/fileProcessing.helpers";
+import { emitNewMessage, emitChatDeleted } from "./helpers/socketNotification.helpers";
+import { checkIsAdmin, getTargetUserId, buildGetMessagesParams, extractUserId } from "./helpers/requestParsing.helpers";
+
+// ============================================================================
+// SEND MESSAGE
+// ============================================================================
 
 export const sendMessage = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
-    const user = await User.findById(userId);
-    const isAdmin = user?.role === "admin" || req.userRole === "admin";
+    const isAdmin = await checkIsAdmin(userId, req.userRole);
     const { content, messageType } = req.body;
 
-    if (!messageType) {
-      return res.status(400).json({
-        success: false,
-        message: "Message type is required",
-      });
+    // Validate message type and content
+    const typeValidation = validateMessageType(messageType, content, res);
+    if (!typeValidation.valid) {
+      return;
     }
 
-    if (messageType === "text" && !content) {
-      return res.status(400).json({
-        success: false,
-        message: "Content is required for text messages",
-      });
+    // Extract file info if file is uploaded
+    const fileInfo = await extractFileInfo(req.file);
+
+    // Validate file requirement for non-text messages
+    const fileValidation = validateFileForMessage(messageType, !!req.file, res);
+    if (!fileValidation.valid) {
+      return;
     }
 
-    let fileUrl: string | undefined;
-    let fileName: string | undefined;
-    let fileSize: number | undefined;
-    let mimeType: string | undefined;
-
-    if (req.file) {
-      const { getS3Url } = await import("../../lib/upload/upload.s3");
-      fileUrl = (req.file as any).location || getS3Url((req.file as any).key || req.file.path);
-      fileName = req.file.originalname;
-      fileSize = req.file.size;
-      mimeType = req.file.mimetype;
-    }
-
-    if (messageType !== "text" && !req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "File is required for non-text messages",
-      });
-    }
-
-    const targetUserId = isAdmin ? (req.body.userId || userId) : userId!;
+    const targetUserId = getTargetUserId(isAdmin, userId, req.body.userId);
     
     const result = await createMessage({
       userId: targetUserId,
       adminId: isAdmin ? userId : undefined,
       messageType,
       content,
-      fileUrl,
-      fileName,
-      fileSize,
-      mimeType,
+      ...fileInfo,
       sentBy: isAdmin ? "admin" : "user",
     });
 
-    const io = getSocketInstance();
-    if (io && result.data) {
-      io.to(`user:${targetUserId}`).emit("new_message", result.data);
-      io.to("admins").emit("new_message", result.data);
-      if (!isAdmin) {
-        io.to(`user:${userId}`).emit("new_message", result.data);
-      }
-    }
+    // Emit socket notification
+    emitNewMessage(result.data, targetUserId, userId, isAdmin);
 
     res.status(201).json(result);
   } catch (error: any) {
@@ -84,20 +61,16 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ============================================================================
+// GET ALL MESSAGES
+// ============================================================================
+
 export const getAllMessages = async (req: AuthRequest, res: Response) => {
   try {
     const { userId, isRead } = req.query;
     const isAdmin = req.userRole === "admin";
 
-    const params: any = {};
-    
-    if (isAdmin) {
-      if (userId) params.userId = userId as string;
-    } else {
-      params.userId = req.userId;
-    }
-    
-    if (isRead !== undefined) params.isRead = isRead === "true";
+    const params = buildGetMessagesParams(isAdmin, req.userId, userId as string | undefined, isRead as string | undefined);
 
     const result = await getMessages(params);
     res.status(200).json(result);
@@ -109,24 +82,20 @@ export const getAllMessages = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ============================================================================
+// GET USER MESSAGES
+// ============================================================================
+
 export const getUserMessages = async (req: AuthRequest, res: Response) => {
   try {
-    let userId: string | undefined;
-    
-    if (req.params.userId) {
-      userId = req.params.userId;
-    } else if (req.userId) {
-      userId = req.userId;
+    const userId = extractUserId(req.params.userId, req.userId);
+
+    const userIdValidation = validateUserId(userId, res);
+    if (!userIdValidation.valid) {
+      return;
     }
 
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "User ID is required",
-      });
-    }
-
-    const userIdString = userId.toString();
+    const userIdString = userId!.toString();
     const result = await getMessagesByUserId(userIdString);
     
     res.status(200).json(result);
@@ -138,15 +107,17 @@ export const getUserMessages = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ============================================================================
+// MARK AS READ
+// ============================================================================
+
 export const markAsRead = async (req: AuthRequest, res: Response) => {
   try {
     const { messageIds } = req.body;
 
-    if (!Array.isArray(messageIds) || messageIds.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "messageIds array is required",
-      });
+    const idsValidation = validateMessageIds(messageIds, res);
+    if (!idsValidation.valid) {
+      return;
     }
 
     const result = await markMessagesAsRead(messageIds);
@@ -159,18 +130,19 @@ export const markAsRead = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ============================================================================
+// DELETE MESSAGE BY ID
+// ============================================================================
+
 export const deleteMessageById = async (req: AuthRequest, res: Response) => {
   try {
     const { messageId } = req.params;
     const userId = req.userId!;
-    const user = await User.findById(userId);
-    const isAdmin = user?.role === "admin" || req.userRole === "admin";
+    const isAdmin = await checkIsAdmin(userId, req.userRole);
 
-    if (!messageId) {
-      return res.status(400).json({
-        success: false,
-        message: "Message ID is required",
-      });
+    const idValidation = validateMessageId(messageId, res);
+    if (!idValidation.valid) {
+      return;
     }
 
     const result = await deleteMessage(messageId, isAdmin ? undefined : userId);
@@ -183,25 +155,24 @@ export const deleteMessageById = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ============================================================================
+// DELETE ALL MESSAGES
+// ============================================================================
+
 export const deleteAllMessages = async (req: AuthRequest, res: Response) => {
   try {
     const { userId: targetUserId } = req.body;
     const userId = req.userId!;
 
-    if (!targetUserId) {
-      return res.status(400).json({
-        success: false,
-        message: "User ID is required",
-      });
+    const userIdValidation = validateUserId(targetUserId, res);
+    if (!userIdValidation.valid) {
+      return;
     }
 
     const result = await deleteAllMessagesByUserId(targetUserId, userId);
     
-    const io = getSocketInstance();
-    if (io) {
-      io.to(`user:${targetUserId}`).emit("chat_deleted", { userId: targetUserId });
-      io.to("admins").emit("chat_deleted", { userId: targetUserId });
-    }
+    // Emit socket notification
+    emitChatDeleted(targetUserId);
 
     res.status(200).json(result);
   } catch (error: any) {
@@ -211,4 +182,3 @@ export const deleteAllMessages = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-

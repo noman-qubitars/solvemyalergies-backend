@@ -1,33 +1,22 @@
 import { Response } from "express";
 import { createDailySession, getDailySessions, getDailySessionByDay } from "./dailySession.service";
-import { 
-  checkVideoCompletedForDay, 
-  checkPreviousDaysFormSubmittedButVideoNotWatched,
-  checkPreviousDayVideoCompleted,
-  checkAllPreviousDaysVideosCompleted 
-} from "../videoWatchTracking/videoWatchTracking.service";
-import { findDailySessionByUserAndDay } from "../../models/DailySession";
+import { checkVideoCompletedForDay } from "../videoWatchTracking/videoWatchTracking.service";
 import { AuthRequest } from "../../middleware/auth";
 import {
   sendUserIdNotFoundError,
   sendDayRequiredError,
   sendInvalidDayError,
-  sendAnswersNotArrayError,
-  sendIncorrectAnswersCountError,
-  sendMissingQuestionsError,
-  sendQuestionIdRequiredError,
-  sendAnswerRequiredError,
-  sendInvalidAnswerTypeError,
   sendUserIdRequiredError,
-  sendPreviousDayVideoNotCompletedError,
   handleDailySessionError,
 } from "./helpers/dailySession.controller.errors";
-import {
-  validateRequiredQuestions,
-  validateAnswer,
-  canSkipToDay,
-} from "./helpers/dailySession.controller.utils";
+import { validateDay, validateAnswers, getTargetUserId } from "./helpers/requestValidation.helpers";
+import { validateDayAccess } from "./helpers/videoCompletion.helpers";
+import { processSessionsByDay, addDayIfMissing } from "./helpers/sessionProcessing.helpers";
 import { UserAnswer } from "../../models/UserAnswer";
+
+// ============================================================================
+// CREATE SESSION
+// ============================================================================
 
 export const createSession = async (req: AuthRequest, res: Response) => {
   try {
@@ -39,85 +28,38 @@ export const createSession = async (req: AuthRequest, res: Response) => {
 
     const { day, answers, feedback } = req.body;
 
-    if (day === undefined || day === null) {
-      return sendDayRequiredError(res);
-    }
-
-    // Validate day is between 1 and 42
-    const dayNumber = Number(day);
-    if (!Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 42) {
+    // Validate day
+    const dayValidation = validateDay(day);
+    if (!dayValidation.valid) {
+      if (day === undefined || day === null) {
+        return sendDayRequiredError(res);
+      }
       return sendInvalidDayError(res);
     }
 
-    // Check if ALL previous days' videos were completed (except for day 1)
-    // Priority: First check if any form was submitted without video watched (even if skip is allowed)
-    if (dayNumber > 1) {
-      // ALWAYS check if any previous day has form submitted but video not watched
-      // This check takes priority over skip logic
-      const { hasIncompleteVideo, firstDayWithIncompleteVideo } = await checkPreviousDaysFormSubmittedButVideoNotWatched(
-        userId,
-        dayNumber,
-        findDailySessionByUserAndDay
-      );
-      
-      if (hasIncompleteVideo && firstDayWithIncompleteVideo) {
-        return sendPreviousDayVideoNotCompletedError(res, firstDayWithIncompleteVideo);
-      }
-      
-      // If no form submitted with incomplete video, check skip logic
-      let canSkip = false;
-      try {
-        const userAnswer = await UserAnswer.findOne({ userId });
-        if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
-          canSkip = canSkipToDay(userAnswer.answers, dayNumber);
-        }
-      } catch (error) {
-        // If error fetching user answers, continue with normal check
-      }
+    const dayNumber = dayValidation.dayNumber!;
 
-      // Only check all previous days' videos if user cannot skip
-      if (!canSkip) {
-        // Check ALL previous days have videos completed
-        const { allCompleted, firstIncompleteDay } = await checkAllPreviousDaysVideosCompleted(userId, dayNumber);
-        
-        if (!allCompleted) {
-          return sendPreviousDayVideoNotCompletedError(res, firstIncompleteDay || undefined);
-        }
-      }
+    // Validate day access (video completion checks)
+    const accessValidation = await validateDayAccess(userId, dayNumber);
+    if (!accessValidation.canProceed) {
+      return res.status(403).json({
+        success: false,
+        message: accessValidation.errorDay
+          ? `Please complete day ${accessValidation.errorDay}'s session video before starting a new session. All previous days' videos must be watched completely.`
+          : "Please complete all previous days' session videos before starting a new session. Videos must be watched completely without skipping forward.",
+      });
     }
 
-    if (!answers || !Array.isArray(answers)) {
-      return sendAnswersNotArrayError(res);
-    }
-
-    if (answers.length !== 6) {
-      return sendIncorrectAnswersCountError(res);
-    }
-
-    const questionsValidation = validateRequiredQuestions(answers);
-    if (!questionsValidation.valid) {
-      return sendMissingQuestionsError(res, questionsValidation.missing!);
-    }
-
-    for (const answer of answers) {
-      const answerValidation = validateAnswer(answer);
-      if (!answerValidation.valid) {
-        if (answerValidation.error?.includes("questionId")) {
-          return sendQuestionIdRequiredError(res);
-        }
-        if (answerValidation.error?.includes("required")) {
-          return sendAnswerRequiredError(res, answer.questionId || "");
-        }
-        if (answerValidation.error?.includes("number")) {
-          return sendInvalidAnswerTypeError(res, answer.questionId || "");
-        }
-      }
+    // Validate answers
+    const answersValidation = validateAnswers(answers, res);
+    if (!answersValidation.valid) {
+      return; // Error already sent
     }
 
     const result = await createDailySession({
       userId,
       day: dayNumber,
-      answers,
+      answers: answersValidation.answers!,
       feedback,
     });
 
@@ -127,33 +69,32 @@ export const createSession = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ============================================================================
+// GET SESSIONS
+// ============================================================================
+
 export const getSessions = async (req: AuthRequest, res: Response) => {
   try {
     const { userId, day } = req.query;
     const isAdmin = req.userRole === "admin";
 
-    let targetUserId: string | undefined;
-    if (isAdmin) {
-      targetUserId = userId as string | undefined;
-    } else {
-      targetUserId = req.userId || undefined;
-    }
+    const targetUserId = getTargetUserId(isAdmin, req.userId, userId as string | undefined);
 
     if (!targetUserId) {
       return sendUserIdNotFoundError(res);
     }
 
-    const params: { userId?: string; day?: number } = {};
-    params.userId = targetUserId;
+    const params: { userId?: string; day?: number } = {
+      userId: targetUserId,
+    };
 
-    // If day is provided, validate video completion checks
+    // If day is provided, validate it
     let dayNum: number | undefined;
     if (day !== undefined && day !== null) {
-      dayNum = Number(day);
-      if (Number.isInteger(dayNum) && dayNum >= 1 && dayNum <= 42) {
+      const dayValidation = validateDay(day);
+      if (dayValidation.valid) {
+        dayNum = dayValidation.dayNumber;
         params.day = dayNum;
-      } else {
-        dayNum = undefined;
       }
     }
 
@@ -164,7 +105,7 @@ export const getSessions = async (req: AuthRequest, res: Response) => {
     if (!isAdmin && result.data && Array.isArray(result.data)) {
       const sessions = result.data as any[];
       
-      // Get user answers once for skip checking (used for multiple days)
+      // Get user answers once for skip checking
       let userAnswer: any = null;
       try {
         userAnswer = await UserAnswer.findOne({ userId: targetUserId });
@@ -172,84 +113,13 @@ export const getSessions = async (req: AuthRequest, res: Response) => {
         // Error fetching user answers, continue without skip check
       }
 
-      // Helper function to calculate canSubmit for a specific day
-      const calculateCanSubmit = async (day: number, sessionExists: boolean): Promise<boolean> => {
-        if (sessionExists) {
-          // Session already exists, so canSubmit is true (already submitted)
-          return true;
-        }
-        
-        if (day === 1) {
-          // Day 1 can always be submitted
-          return true;
-        }
-        
-        // Check if user can skip to this day
-        let canSkip = false;
-        if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
-          canSkip = canSkipToDay(userAnswer.answers, day);
-        }
-        
-        if (canSkip) {
-          return true;
-        }
-        
-        // Check if previous day's video is completed
-        return await checkPreviousDayVideoCompleted(targetUserId, day);
-      };
-
-      // Group sessions by day
-      const sessionsByDay = new Map<number, any[]>();
-      sessions.forEach((session: any) => {
-        const day = Number(session.day);
-        if (!sessionsByDay.has(day)) {
-          sessionsByDay.set(day, []);
-        }
-        sessionsByDay.get(day)!.push(session);
-      });
-
-      // Process each day to add videoCompleted and canSubmit
-      const daysWithFlags = await Promise.all(
-        Array.from(sessionsByDay.entries()).map(async ([day, daySessions]) => {
-          // CHECK 1: videoCompleted for this specific day (independent check)
-          const videoCompleted = await checkVideoCompletedForDay(targetUserId, day);
-          
-          // CHECK 2: canSubmit for this specific day (independent check)
-          const canSubmit = await calculateCanSubmit(day, daySessions.length > 0);
-          
-          // Extract answers from the first session (if exists)
-          const answers = daySessions.length > 0 ? (daySessions[0].answers || []) : [];
-          
-          return {
-            day,
-            videoCompleted,
-            canSubmit,
-            answers,
-          };
-        })
-      );
+      // Process sessions by day
+      let daysWithFlags = await processSessionsByDay(sessions, targetUserId);
 
       // If a specific day was requested but no session exists, add it with flags
       if (dayNum !== undefined) {
-        const dayExists = daysWithFlags.some((d: any) => d.day === dayNum);
-        
-        if (!dayExists) {
-          // No session for this day, check flags independently
-          const videoCompleted = await checkVideoCompletedForDay(targetUserId, dayNum);
-          const canSubmit = await calculateCanSubmit(dayNum, false); // No session exists
-          
-          // Add entry with flags for the requested day (empty answers array)
-          daysWithFlags.push({
-            day: dayNum,
-            videoCompleted,
-            canSubmit,
-            answers: [],
-          });
-        }
+        daysWithFlags = await addDayIfMissing(daysWithFlags, dayNum, targetUserId, userAnswer);
       }
-
-      // Sort by day number
-      daysWithFlags.sort((a: any, b: any) => a.day - b.day);
 
       result.data = daysWithFlags;
     }
@@ -266,32 +136,36 @@ export const getSessions = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ============================================================================
+// GET SESSION BY DATE
+// ============================================================================
+
 export const getSessionByDate = async (req: AuthRequest, res: Response) => {
   try {
     const { userId, dayNumber } = req.query;
     const isAdmin = req.userRole === "admin";
 
-    let targetUserId: string;
-    if (isAdmin) {
-      if (!userId) {
+    const targetUserId = getTargetUserId(isAdmin, req.userId, userId as string | undefined);
+
+    if (!targetUserId) {
+      if (isAdmin) {
         return sendUserIdRequiredError(res);
-      }
-      targetUserId = userId as string;
-    } else {
-      if (!req.userId) {
+      } else {
         return sendUserIdNotFoundError(res);
       }
-      targetUserId = req.userId;
     }
 
+    // Validate day
     if (dayNumber === undefined || dayNumber === null) {
       return sendDayRequiredError(res);
     }
 
-    const dayNum = Number(dayNumber);
-    if (!Number.isInteger(dayNum) || dayNum < 1 || dayNum > 42) {
+    const dayValidation = validateDay(dayNumber);
+    if (!dayValidation.valid) {
       return sendInvalidDayError(res);
     }
+
+    const dayNum = dayValidation.dayNumber!;
     
     // Check if video is completed for this day
     const videoCompleted = await checkVideoCompletedForDay(targetUserId, dayNum);

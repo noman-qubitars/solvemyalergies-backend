@@ -153,4 +153,3 @@ export const deleteAllMessagesByUserId = async (targetUserId: string, userId?: s
     deletedCount: result.deletedCount,
   };
 };
-
