@@ -41,6 +41,22 @@ export const getDefaultAvatarUrl = async (): Promise<string> => {
   }
 };
 
+export const normalizeAvatarUrl = async (imageUrl: string | undefined | null): Promise<string> => {
+  if (!imageUrl || imageUrl === "/uploads/images/avatar.png" || imageUrl === "/uploads/profile/avatar.png") {
+    return await getDefaultAvatarUrl();
+  }
+  
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+    return imageUrl;
+  }
+  
+  if (imageUrl.startsWith("/uploads/")) {
+    return getS3Url(imageUrl);
+  }
+  
+  return imageUrl;
+};
+
 const uploadDefaultAvatar = async (): Promise<void> => {
   if (!isS3Configured() || !s3Client || !config.s3.S3_BUCKET_NAME) {
     throw new Error("S3 is not configured");

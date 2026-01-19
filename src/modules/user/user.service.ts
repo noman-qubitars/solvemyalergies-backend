@@ -1,6 +1,7 @@
 import { findUserByIdWithoutPassword, findAllUsers, updateUserActivity as updateUserActivityModel, toggleUserStatus as toggleUserStatusModel } from "../../models/User";
 import { findSubscriptionByEmail, findAllSubscriptions } from "../../models/Subscription";
 import { getActiveSession, UserSessionModel } from "../../models/UserSession";
+import { normalizeAvatarUrl } from "../../lib/upload/upload.avatar";
 
 export interface UserWithSubscription {
   id: string;
@@ -30,12 +31,14 @@ export const getUserById = async (userId: string): Promise<UserWithSubscription>
     isActive: false
   }).sort({ endTime: -1 });
 
+  const normalizedImage = await normalizeAvatarUrl(user.image);
+
   return {
     id: user._id.toString(),
     name: user.name || `${subscription?.firstName || ""} ${subscription?.lastName || ""}`.trim() || user.email.split("@")[0],
     email: user.email,
     phone: subscription?.phone || "N/A",
-    image: user.image || "/uploads/images/avatar.png",
+    image: normalizedImage,
     joinedDate: user.createdAt,
     activity: user.activity,
     status: user.status || "Active",
@@ -75,7 +78,11 @@ export const getAllUsers = async (): Promise<UserWithSubscription[]> => {
     lastSessions.map((session, index) => [userIds[index], session])
   );
 
-  const usersWithSubscription: UserWithSubscription[] = users.map((user) => {
+  const normalizedImages = await Promise.all(
+    users.map(user => normalizeAvatarUrl(user.image))
+  );
+
+  const usersWithSubscription: UserWithSubscription[] = users.map((user, index) => {
     const subscription = subscriptionMap.get(user.email);
     const userId = user._id.toString();
     const activeSession = activeSessionMap.get(userId);
@@ -86,7 +93,7 @@ export const getAllUsers = async (): Promise<UserWithSubscription[]> => {
       name: user.name || `${subscription?.firstName || ""} ${subscription?.lastName || ""}`.trim() || user.email.split("@")[0],
       email: user.email,
       phone: subscription?.phone || "N/A",
-      image: user.image || "/uploads/images/avatar.png",
+      image: normalizedImages[index],
       joinedDate: user.createdAt,
       activity: user.activity,
       status: user.status || "Active",
