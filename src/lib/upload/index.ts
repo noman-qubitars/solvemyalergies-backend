@@ -4,3 +4,4 @@ export { uploadVideo } from "./upload.video";
 export { uploadProfileImage } from "./upload.profile";
 export { uploadQuizImage, uploadQuiz } from "./upload.quiz";
 export { handleFileUpload, handleQuizFileUpload } from "./upload.handlers";
+export { getDefaultAvatarUrl } from "./upload.avatar";

@@ -24,10 +24,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
     const imagePath = extractImagePath(files);
 
-    if (imagePath === undefined) {
-      return sendImageRequiredError(res);
-    }
-
     const updateData = buildUpdateData(name, newPassword, imagePath);
     const result = await editProfile(userId, updateData);
 

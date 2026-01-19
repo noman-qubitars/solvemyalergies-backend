@@ -3,6 +3,7 @@ import { findUserByEmail, createUser, updateUserById } from "../../models/User";
 import { findSubscriptionByEmail } from "../../models/Subscription";
 import { sendOtpEmail } from "../../services/mailService";
 import { createUserSession, endAllActiveSessions } from "../../models/UserSession";
+import { getDefaultAvatarUrl } from "../../lib/upload/upload.avatar";
 import {
   createToken,
   generateOtpCode,
@@ -33,7 +34,7 @@ export const signin = async (payload: { email: string; password: string }) => {
     
     const hashedPassword = await bcrypt.hash(payload.password, 10);
     const userName = `${subscription.firstName} ${subscription.lastName}`.trim() || payload.email.split("@")[0];
-    const defaultImage = "/uploads/images/avatar.png";
+    const defaultImage = await getDefaultAvatarUrl();
     
     const existingUser = await findUserByEmail(payload.email);
     let createdUser;
@@ -88,7 +89,7 @@ export const signin = async (payload: { email: string; password: string }) => {
   const userId = user._id.toString();
   const userRole = user.role || "user";
   const userName = user.name || payload.email.split("@")[0];
-  const userImage = user.image || "/uploads/images/avatar.png";
+  const userImage = user.image || await getDefaultAvatarUrl();
   
   await endAllActiveSessions(userId);
   await createUserSession(userId);

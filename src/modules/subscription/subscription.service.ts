@@ -9,6 +9,7 @@ import {
 import { findUserByEmail, createUser } from "../../models/User";
 import bcrypt from "bcrypt";
 import { sendSubscriptionEmail } from "../../services/mailService";
+import { getDefaultAvatarUrl } from "../../lib/upload/upload.avatar";
 
 const stripe = new Stripe(config.stripe.secretKey, {
   apiVersion: "2025-12-15.clover",
@@ -71,10 +72,12 @@ export const createCheckoutSession = async (
     } else {
       const tempPassword = generatePassword();
       const hashedPassword = await bcrypt.hash(tempPassword, 10);
+      const defaultImage = await getDefaultAvatarUrl();
       user = await createUser({
         email,
         password: hashedPassword,
         name: `${firstName} ${lastName}`,
+        image: defaultImage,
         role: "user",
         status: "inactive",
         activity: new Date(),

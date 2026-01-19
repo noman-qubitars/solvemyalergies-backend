@@ -2,6 +2,7 @@ import { findUserByEmail, createUser, updateUserById } from "../../../models/Use
 import { findSubscriptionByEmail } from "../../../models/Subscription";
 import bcrypt from "bcrypt";
 import { SALT_ROUNDS } from "./auth.service.utils";
+import { getDefaultAvatarUrl } from "../../../lib/upload/upload.avatar";
 
 export const getUserOrSubscriptionUserId = async (email: string): Promise<{ userId: string; isSubscription: boolean } | null> => {
   const user = await findUserByEmail(email);
@@ -27,7 +28,7 @@ export const createOrUpdateUserFromSubscription = async (email: string, password
   
   const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
   const userName = `${subscription.firstName} ${subscription.lastName}`.trim() || email.split("@")[0];
-  const defaultImage = "/uploads/images/avatar.png";
+  const defaultImage = await getDefaultAvatarUrl();
   
   const existingUser = await findUserByEmail(email);
   

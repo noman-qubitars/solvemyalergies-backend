@@ -1,5 +1,6 @@
 import { findUserById, findUserByIdWithoutPassword, updateUserById } from "../../models/User";
 import { hashPassword } from "./helpers/profile.service.utils";
+import { getDefaultAvatarUrl } from "../../lib/upload/upload.avatar";
 
 export const editProfile = async (
   userId: string,
@@ -59,13 +60,15 @@ export const getProfile = async (userId: string) => {
     throw new Error("User not found");
   }
 
+  const defaultImage = await getDefaultAvatarUrl();
+
   return {
     success: true,
     data: {
       id: user._id,
       email: user.email,
       name: user.name,
-      image: user.image || "/uploads/images/avatar.png",
+      image: user.image || defaultImage,
       role: user.role,
       status: user.status,
       activity: user.activity,
