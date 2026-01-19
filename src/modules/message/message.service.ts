@@ -1,5 +1,6 @@
-import { Message, IMessage } from "../../models/Message";
+import { Message } from "../../models/Message";
 import { User } from "../../models/User";
+import { deleteFromS3 } from "../../lib/upload/upload.s3";
 import fs from "fs";
 import path from "path";
 
@@ -108,9 +109,17 @@ export const deleteMessage = async (messageId: string, userId?: string) => {
   }
 
   if (message.fileUrl) {
-    const filePath = path.join(process.cwd(), message.fileUrl);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    try {
+      if (message.fileUrl.startsWith('http://') || message.fileUrl.startsWith('https://')) {
+        await deleteFromS3(message.fileUrl);
+      } else {
+        const filePath = path.join(process.cwd(), message.fileUrl);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
     }
   }
 
@@ -138,9 +147,17 @@ export const deleteAllMessagesByUserId = async (targetUserId: string, userId?: s
 
   for (const message of messages) {
     if (message.fileUrl) {
-      const filePath = path.join(process.cwd(), message.fileUrl);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      try {
+        if (message.fileUrl.startsWith('http://') || message.fileUrl.startsWith('https://')) {
+          await deleteFromS3(message.fileUrl);
+        } else {
+          const filePath = path.join(process.cwd(), message.fileUrl);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      } catch (error) {
+        console.error('Error deleting file:', error);
       }
     }
   }
