@@ -12,7 +12,7 @@ import { config } from "../../config/env";
 import { generateUniqueFilename, getSubfolderByMimeType } from "./upload.utils";
 import { getS3Url } from "./upload.s3";
 
-const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB per chunk
+const CHUNK_SIZE = 50 * 1024 * 1024; // 50 MB per chunk
 
 export interface InitiateUploadResponse {
   uploadId: string;
