@@ -15,8 +15,6 @@ export const sendAnswerSuccessResponse = (
       id: userAnswer._id,
       userId: userAnswer.userId,
       answers: userAnswer.answers,
-      assignedSessions: (userAnswer as any).assignedSessions,
-      sessionAssignments: (userAnswer as any).sessionAssignments,
       createdAt: userAnswer.createdAt,
       updatedAt: userAnswer.updatedAt,
     },

@@ -8,6 +8,7 @@ import {
 } from "./sessionVideo.service";
 import { AuthRequest } from "../../middleware/auth";
 import { UserAnswer } from "../../models/UserAnswer";
+import { DailySession } from "../../models/DailySession";
 import {
   extractSymptomsFromAnswers,
   matchSymptoms,
@@ -87,38 +88,136 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
 
 export const getVideos = async (req: AuthRequest, res: Response) => {
   try {
-    const { status } = req.query;
+    const { status, day } = req.query;
     const userId = req.userId;
+    const userRole = req.userRole;
 
     let queryStatus: "uploaded" | "draft" | undefined = status as "uploaded" | "draft" | undefined;
     if (status === "published") {
       queryStatus = "uploaded";
     }
 
-    if (userId) {
+    // Helper to split videos into core sessions and exercise videos
+    const splitVideosByType = (videos: any[]) => {
+      const sessions = videos.filter(
+        (video) =>
+          typeof video.title === "string" &&
+          video.title.toLowerCase().includes("session video")
+      );
+      const exercises = videos.filter(
+        (video) =>
+          typeof video.title === "string" &&
+          video.title.toLowerCase().includes("exercise video")
+      );
+      return { sessions, exercises };
+    };
+
+    const resolveDayForUser = async (): Promise<number | null> => {
+      if (day !== undefined && day !== null && String(day).trim() !== "") {
+        const parsedDay = Number(day);
+        if (!Number.isFinite(parsedDay) || parsedDay <= 0) {
+          return null;
+        }
+        return Math.floor(parsedDay);
+      }
+
+      if (!userId) return null;
+
+      const latestSession = await DailySession.findOne({ userId })
+        .sort({ day: -1 })
+        .select({ day: 1 })
+        .lean();
+
+      if (!latestSession || typeof (latestSession as any).day !== "number") {
+        return null;
+      }
+
+      return (latestSession as any).day;
+    };
+
+    const filterVideosForDay = (videos: any[], targetDay: number) => {
+      return videos.filter((video) => {
+        if (typeof video?.description !== "string") return false;
+        const d = video.description.trim();
+
+        // Match formats like:
+        // - "Day 1"
+        // - "Day 8a" / "Day 8b"
+        // - "Day 40"
+        const m = /^day\s*(\d+)/i.exec(d);
+        if (!m) return false;
+
+        const parsed = Number(m[1]);
+        if (!Number.isFinite(parsed)) return false;
+
+        return parsed === targetDay;
+      });
+    };
+
+    // For non-admin authenticated users, always return day-filtered grouped data.
+    // If we have UserAnswer data, additionally apply symptom-based filtering
+    // and exercise-frequency rules.
+    if (userId && userRole !== "admin") {
+      const targetDay = await resolveDayForUser();
+      if (!targetDay) {
+        return res.status(400).json({
+          success: false,
+          message: "Day is required for user requests (provide ?day=1) or submit a daily session first.",
+        });
+      }
+
       const userAnswer = await UserAnswer.findOne({ userId });
+
+      const allVideos = await getAllSessionVideos(queryStatus);
+      let candidateVideos = allVideos;
 
       if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
         const userSymptoms = extractSymptomsFromAnswers(userAnswer.answers);
-        const allVideos = await getAllSessionVideos(queryStatus);
-
         if (userSymptoms.length > 0) {
-          const filteredVideos = allVideos.filter(video => {
+          candidateVideos = allVideos.filter((video) => {
             if (video.symptoms.length === 0) return true;
             return matchSymptoms(userSymptoms, video.symptoms);
           });
-
-          const videosWithDuration = await addDurationToVideos(filteredVideos);
-
-          return res.status(200).json({
-            success: true,
-            data: videosWithDuration,
-            total: videosWithDuration.length,
-          });
         }
       }
+
+      const videosWithDuration = await addDurationToVideos(candidateVideos);
+      const { sessions, exercises } = splitVideosByType(videosWithDuration);
+
+      const daySessions = filterVideosForDay(sessions, targetDay);
+      const dayExercises = filterVideosForDay(exercises, targetDay);
+
+      // Apply exercise frequency rule based on question_36 ("I exercise:")
+      // Only if userAnswer exists. Otherwise show day exercises by default.
+      let filteredExercises = dayExercises;
+      if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
+        const q36Answer = userAnswer.answers.find(
+          (ans: any) => ans.questionId === "question_36"
+        );
+        const frequency =
+          typeof q36Answer?.selectedOption === "string"
+            ? q36Answer.selectedOption.toLowerCase()
+            : null;
+
+        if (frequency === "weekly" || frequency === "daily") {
+          filteredExercises = [];
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          sessions: daySessions,
+          exercises: filteredExercises,
+        },
+        total: {
+          sessions: daySessions.length,
+          exercises: filteredExercises.length,
+        },
+      });
     }
 
+    // Default behaviour (admin or unauthenticated) – return flat list
     const videos = await getAllSessionVideos(queryStatus);
     const videosWithDuration = await addDurationToVideos(videos);
 
