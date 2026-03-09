@@ -11,7 +11,11 @@ export const getDemoVideo = async (req: Request, res: Response) => {
       const thumbnailUrl =
         demoThumbnailUrlFromEnv && String(demoThumbnailUrlFromEnv).trim() !== ""
           ? String(demoThumbnailUrlFromEnv)
-          : String(demoVideoUrl).replace(/\.[^./\\?]+(?=(\?|$))/, ".jpg");
+          : String(demoVideoUrl).includes("/uploads/videos/")
+            ? String(demoVideoUrl)
+                .replace("/uploads/videos/", "/uploads/thumbnails/")
+                .replace(/\.[^./\\?]+(?=(\?|$))/, ".png")
+            : String(demoVideoUrl).replace(/\.[^./\\?]+(?=(\?|$))/, ".png");
 
       return res.status(200).json({
         success: true,
@@ -23,9 +27,16 @@ export const getDemoVideo = async (req: Request, res: Response) => {
     }
 
     const demoVideoKey = process.env.DEMO_VIDEO_KEY || "uploads/videos/demo-video.mp4";
+    const demoThumbnailKeyFromEnv = process.env.DEMO_VIDEO_THUMBNAIL_KEY;
+    const derivedDemoThumbnailKey = (() => {
+      const base = String(demoVideoKey).split("/").pop() || "demo-video.mp4";
+      const pngName = base.replace(/\.[^./\\?]+(?=(\?|$))/, ".png");
+      return `uploads/thumbnails/${pngName}`;
+    })();
     const demoThumbnailKey =
-      process.env.DEMO_VIDEO_THUMBNAIL_KEY ||
-      String(demoVideoKey).replace(/\.[^./\\?]+(?=(\?|$))/, ".jpg");
+      demoThumbnailKeyFromEnv && String(demoThumbnailKeyFromEnv).trim() !== ""
+        ? String(demoThumbnailKeyFromEnv)
+        : derivedDemoThumbnailKey;
     const bucketUrl = config.s3.S3_BUCKET_URL;
     const bucketName = config.s3.S3_BUCKET_NAME;
     const region = config.s3.AWS_REGION;
@@ -56,7 +67,7 @@ export const getDemoVideo = async (req: Request, res: Response) => {
     const thumbnailPath = path.join(
       process.cwd(),
       "uploads",
-      "videos",
+      "thumbnails",
       "demo-thumbnail.jpg"
     );
     
@@ -69,7 +80,7 @@ export const getDemoVideo = async (req: Request, res: Response) => {
 
     const videoUrl = "/uploads/videos/demo.mp4";
     const thumbnailUrl = fs.existsSync(thumbnailPath)
-      ? "/uploads/videos/demo-thumbnail.jpg"
+      ? "/uploads/thumbnails/demo-thumbnail.jpg"
       : null;
 
     res.status(200).json({
