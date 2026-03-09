@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 import { Question } from "../../../models/Question";
 import { AnswerItem } from "../../../models/UserAnswer";
-import { assignSessionsFromAnswers } from "../../../services/sessionAssignmentService";
 
 export const getQuestionNumber = (questionId: string): number | null => {
   const match = questionId.match(/question_(\d+)/);
@@ -52,10 +51,6 @@ export const extractUserGender = (answers: AnswerItem[]): string | undefined => 
 };
 
 export const calculateAndAssignSessions = async (userAnswer: any) => {
-  const userGender = extractUserGender(userAnswer.answers);
-  const sessionResult = assignSessionsFromAnswers(userAnswer.answers, userGender);
-  (userAnswer as any).assignedSessions = sessionResult.assignedSessions;
-  (userAnswer as any).sessionAssignments = sessionResult.sessionAssignments;
   await userAnswer.save();
   return userAnswer;
 };

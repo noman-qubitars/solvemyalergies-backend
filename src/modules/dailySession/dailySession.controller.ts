@@ -39,28 +39,20 @@ export const createSession = async (req: AuthRequest, res: Response) => {
 
     const dayNumber = dayValidation.dayNumber!;
 
-    // Validate day access (video completion checks)
-    // Rule: a user cannot submit day N until they have fully watched (completed)
-    // all previous days' session videos. If any required previous day video is
-    // incomplete, we return a 403 with a message like:
-    // "Please complete day 1's session video before starting a new session..."
-    const skipVideoCompletionValidation = String(process.env.SKIP_VIDEO_COMPLETION_VALIDATION).toLowerCase() === "true";
-    if (!skipVideoCompletionValidation) {
-      const accessValidation = await validateDayAccess(userId, dayNumber);
-      if (!accessValidation.canProceed) {
-        return res.status(403).json({
-          success: false,
-          message: accessValidation.errorDay
-            ? `Please complete day ${accessValidation.errorDay}'s session video before starting a new session. All previous days' videos must be watched completely.`
-            : "Please complete all previous days' session videos before starting a new session. Videos must be watched completely without skipping forward.",
-        });
-      }
+    const accessValidation = await validateDayAccess(userId, dayNumber);
+    if (!accessValidation.canProceed) {
+      return res.status(403).json({
+        success: false,
+        message: accessValidation.errorDay
+          ? `Please complete day ${accessValidation.errorDay}'s session video before starting a new session. All previous days' videos must be watched completely.`
+          : "Please complete all previous days' session videos before starting a new session. Videos must be watched completely without skipping forward.",
+      });
     }
 
     // Validate answers
     const answersValidation = validateAnswers(answers, res);
     if (!answersValidation.valid) {
-      return; // Error already sent
+      return;
     }
 
     const result = await createDailySession({
@@ -107,8 +99,6 @@ export const getSessions = async (req: AuthRequest, res: Response) => {
 
     const result = await getDailySessions(params);
 
-    // Group sessions by day and add videoCompleted and canSubmit for each day
-    // Always apply grouping for non-admin users
     if (!isAdmin && result.data && Array.isArray(result.data)) {
       const sessions = result.data as any[];
       

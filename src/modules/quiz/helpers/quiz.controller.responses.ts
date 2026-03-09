@@ -41,10 +41,7 @@ export const sendSessionCalculationResponse = (res: Response, userAnswer: any) =
   res.status(200).json({
     success: true,
     message: "Sessions calculated successfully",
-    data: {
-      assignedSessions: (userAnswer as any).assignedSessions,
-      sessionAssignments: (userAnswer as any).sessionAssignments,
-    },
+    data: {},
   });
 };
 

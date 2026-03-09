@@ -2,7 +2,6 @@ import { Router } from "express";
 import {
   createVideo,
   getVideos,
-  getVideoById,
   updateVideo,
   deleteVideo,
   initiateUploadVideo,
@@ -23,7 +22,6 @@ sessionVideoRouter.post("/complete-upload", authenticate, requireRole("admin"), 
 sessionVideoRouter.post("/:id/initiate-update-upload", authenticate, requireRole("admin"), validate(initiateUploadSchema), initiateUpdateUploadVideo);
 sessionVideoRouter.post("/:id/complete-update-upload", authenticate, requireRole("admin"), validate(completeUpdateUploadSchema), completeUpdateUploadVideo);
 sessionVideoRouter.get("/", conditionalAuthForVideos, getVideos);
-sessionVideoRouter.get("/:id", getVideoById);
 sessionVideoRouter.put("/:id", authenticate, requireRole("admin"), uploadVideo.single("video"), updateVideo);
 sessionVideoRouter.delete("/:id", authenticate, requireRole("admin"), deleteVideo);
 

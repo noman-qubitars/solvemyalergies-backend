@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import {
   createSessionVideo,
   getAllSessionVideos,
@@ -22,7 +22,7 @@ import {
   abortVideoUpload,
 } from "./helpers/chunkedUpload.helpers";
 import { deleteVideoFiles } from "./helpers/videoDeletion.utils";
-import { addDurationToVideos, addDurationToVideo } from "./helpers/videoDuration.utils";
+import { addDurationToVideos } from "./helpers/videoDuration.utils";
 import fs from "fs";
 import path from "path";
 
@@ -140,10 +140,6 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
         if (typeof video?.description !== "string") return false;
         const d = video.description.trim();
 
-        // Match formats like:
-        // - "Day 1"
-        // - "Day 8a" / "Day 8b"
-        // - "Day 40"
         const m = /^day\s*(\d+)/i.exec(d);
         if (!m) return false;
 
@@ -154,9 +150,6 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
       });
     };
 
-    // For non-admin authenticated users, always return day-filtered grouped data.
-    // If we have UserAnswer data, additionally apply symptom-based filtering
-    // and exercise-frequency rules.
     if (userId && userRole !== "admin") {
       const targetDay = await resolveDayForUser();
       if (!targetDay) {
@@ -187,8 +180,6 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
       const daySessions = filterVideosForDay(sessions, targetDay);
       const dayExercises = filterVideosForDay(exercises, targetDay);
 
-      // Apply exercise frequency rule based on question_36 ("I exercise:")
-      // Only if userAnswer exists. Otherwise show day exercises by default.
       let filteredExercises = dayExercises;
       if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
         const q36Answer = userAnswer.answers.find(
@@ -217,7 +208,6 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Default behaviour (admin or unauthenticated) – return flat list
     const videos = await getAllSessionVideos(queryStatus);
     const videosWithDuration = await addDurationToVideos(videos);
 
@@ -230,36 +220,6 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || "Failed to fetch session videos",
-    });
-  }
-};
-
-// ============================================================================
-// GET VIDEO BY ID
-// ============================================================================
-
-export const getVideoById = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const video = await getSessionVideoById(id);
-
-    if (!video) {
-      return res.status(404).json({
-        success: false,
-        message: "Session video not found",
-      });
-    }
-
-    const videoWithDuration = await addDurationToVideo(video);
-
-    res.status(200).json({
-      success: true,
-      data: videoWithDuration,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to fetch session video",
     });
   }
 };
