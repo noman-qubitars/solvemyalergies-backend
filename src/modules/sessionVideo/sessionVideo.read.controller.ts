@@ -70,7 +70,7 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
         if (typeof video?.description !== "string") return false;
         const d = video.description.trim();
 
-        const m = /^day\s*(\d+)/i.exec(d);
+        const m = /\bday\s*(\d+)\b/i.exec(d);
         if (!m) return false;
 
         const parsed = Number(m[1]);
