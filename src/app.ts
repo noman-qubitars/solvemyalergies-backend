@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import path from "path";
 import { registerRoutes } from "./routes";
+import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
 
@@ -26,7 +27,9 @@ app.use("/uploads", (req, res, next) => {
 registerRoutes(app);
 
 app.use((_req, res) => {
-  res.status(404).json({ error: "Not found" });
+  res.status(404).json({ success: false, message: "Not found" });
 });
+
+app.use(errorHandler);
 
 export { app };

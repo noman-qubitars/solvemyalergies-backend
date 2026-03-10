@@ -93,23 +93,24 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
       const userAnswer = await UserAnswer.findOne({ userId });
 
       const allVideos = await getAllSessionVideos(queryStatus);
-      let candidateVideos = allVideos;
+      const videosWithDuration = await addDurationToVideos(allVideos);
+      const { sessions, exercises } = splitVideosByType(videosWithDuration);
 
+      // For user requests, always return the day's Session Video.
+      // Symptom-based personalization should not hide the core session content.
+      let candidateExercises = exercises;
       if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
         const userSymptoms = extractSymptomsFromAnswers(userAnswer.answers);
         if (userSymptoms.length > 0) {
-          candidateVideos = allVideos.filter((video) => {
+          candidateExercises = exercises.filter((video) => {
             if (video.symptoms.length === 0) return true;
             return matchSymptoms(userSymptoms, video.symptoms);
           });
         }
       }
 
-      const videosWithDuration = await addDurationToVideos(candidateVideos);
-      const { sessions, exercises } = splitVideosByType(videosWithDuration);
-
       const daySessions = filterVideosForDay(sessions, targetDay);
-      const dayExercises = filterVideosForDay(exercises, targetDay);
+      const dayExercises = filterVideosForDay(candidateExercises, targetDay);
 
       let filteredExercises = dayExercises;
       if (userAnswer && userAnswer.answers && userAnswer.answers.length > 0) {
