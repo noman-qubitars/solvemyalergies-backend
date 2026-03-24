@@ -27,14 +27,6 @@ export interface CompleteUploadParts {
   etag: string;
 }
 
-/**
- * Initiates a multipart upload to S3
- * @param filename Original filename
- * @param mimetype File MIME type
- * @param totalSize Total file size in bytes
- * @param subfolder Optional subfolder (e.g., "videos")
- * @returns Upload ID, key, and presigned URLs for each chunk
- */
 export const initiateMultipartUpload = async (
   filename: string,
   mimetype: string,
@@ -92,13 +84,6 @@ export const initiateMultipartUpload = async (
   };
 };
 
-/**
- * Completes a multipart upload
- * @param uploadId Upload ID from initiateMultipartUpload
- * @param key S3 key from initiateMultipartUpload
- * @param parts Array of completed parts with ETags
- * @returns Final S3 URL of the uploaded file
- */
 export const completeMultipartUpload = async (
   uploadId: string,
   key: string,
@@ -129,15 +114,9 @@ export const completeMultipartUpload = async (
 
   await s3Client.send(completeCommand);
 
-  // Return the final S3 URL
   return getS3Url(key);
 };
 
-/**
- * Aborts a multipart upload
- * @param uploadId Upload ID to abort
- * @param key S3 key
- */
 export const abortMultipartUpload = async (
   uploadId: string,
   key: string
@@ -154,4 +133,3 @@ export const abortMultipartUpload = async (
 
   await s3Client.send(abortCommand);
 };
-

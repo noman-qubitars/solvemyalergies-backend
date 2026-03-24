@@ -33,6 +33,10 @@ export const findVideoWatchTrackingByDay = async (userId: string, dayNumber: num
   return await VideoWatchTrackingModel.findOne({ userId, dayNumber });
 };
 
+export const findVideoWatchTrackingsByDay = async (userId: string, dayNumber: number) => {
+  return await VideoWatchTrackingModel.find({ userId, dayNumber });
+};
+
 export const findCompletedVideosByUser = async (userId: string, dayNumbers?: number[]) => {
   const query: any = { userId, isCompleted: true };
   if (dayNumbers && dayNumbers.length > 0) {

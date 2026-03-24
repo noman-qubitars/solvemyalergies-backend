@@ -2,6 +2,7 @@ import {
   createVideoWatchTracking,
   findVideoWatchTracking,
   findVideoWatchTrackingByDay,
+  findVideoWatchTrackingsByDay,
   updateVideoWatchProgress,
   IVideoWatchTrackingDocument,
 } from "../../models/VideoWatchTracking";
@@ -68,9 +69,26 @@ export const trackVideoWatch = async (data: UpdateProgressData) => {
   const maxWatched = (tracking.maxWatchedPosition || 0);
   const newMaxWatchedPosition = Math.max(maxWatched, currentPosition);
 
-  // Check if user skipped forward (jumped more than threshold)
-  const positionDiff = currentPosition - (tracking.lastPosition || 0);
-  const hasSkippedForward = positionDiff > SKIP_THRESHOLD && currentPosition > (tracking.lastPosition || 0);
+  // Detect seeking/skip-forward.
+  // IMPORTANT: mobile apps often send progress updates every ~10s. A fixed "jump > 5s" check
+  // will incorrectly mark normal playback as skipping. Instead, compare the position jump
+  // against real time elapsed since the last update.
+  const previousPosition = tracking.lastPosition || 0;
+  const positionDiff = currentPosition - previousPosition;
+  const now = new Date();
+  const previousUpdatedAt = tracking.updatedAt ? new Date(tracking.updatedAt) : null;
+  const secondsSinceLastUpdate = previousUpdatedAt
+    ? Math.max(0, (now.getTime() - previousUpdatedAt.getTime()) / 1000)
+    : 0;
+
+  // Allow a small grace to account for player buffering / timer drift.
+  const GRACE_SECONDS = 2;
+
+  // A seek-forward is likely only if the user advanced significantly more than the time elapsed.
+  // Example: if last update was 10s ago and position jumped 40s, that is a seek.
+  const hasSkippedForward =
+    positionDiff > 0 &&
+    positionDiff > (secondsSinceLastUpdate + SKIP_THRESHOLD + GRACE_SECONDS);
 
   // If user goes back to beginning (position < 10 seconds) after skipping, reset skip flag
   // This allows them to preview and then watch from start
@@ -100,6 +118,8 @@ export const trackVideoWatch = async (data: UpdateProgressData) => {
     videoDuration: videoDurationValue,
     hasSkippedForward: effectiveHasSkippedForward,
     isCompleted: isCompleted || tracking.isCompleted, // Use new completion status or keep existing
+    // keep updatedAt accurate (findOneAndUpdate does not run schema pre-save hooks)
+    updatedAt: now,
   };
 
   if (isCompleted && !tracking.isCompleted) {
@@ -120,32 +140,66 @@ export const trackVideoWatch = async (data: UpdateProgressData) => {
 };
 
 
-export const getVideoWatchStatus = async (userId: string, dayNumber: number) => {
+export const getVideoWatchStatus = async (
+  userId: string,
+  dayNumber: number,
+  videoId?: string
+) => {
+  if (videoId && String(videoId).trim() !== "") {
+    const tracking = await findVideoWatchTracking(userId, dayNumber, String(videoId));
+    return { tracking, trackings: tracking ? [tracking] : [] };
+  }
+
+  const trackings = await findVideoWatchTrackingsByDay(userId, dayNumber);
   const tracking = await findVideoWatchTrackingByDay(userId, dayNumber);
-  return tracking;
+  return { tracking, trackings };
 };
 
 export const checkVideoCompletedForDay = async (userId: string, dayNumber: number): Promise<boolean> => {
-  // Get all uploaded session videos
-  const allVideos = await SessionVideo.find({ status: "uploaded" });
-  
-  if (allVideos.length === 0) {
-    return false; // No videos to watch
+  const extractDayNumberFromDescription = (description: unknown): number | null => {
+    if (typeof description !== "string") return null;
+    const d = description.trim();
+
+    // Match formats like:
+    // - "Day 1"
+    // - "... Day 40."
+    // - "Day 8a" / "Day 8b" (optional letter suffix)
+    // Use a lookahead so "Day 1" doesn't match "Day 10".
+    const m = /\bday\s*(\d+)(?:\s*[a-z])?(?=[^\w]|$)/i.exec(d);
+    if (!m) return null;
+
+    const parsed = Number(m[1]);
+    if (!Number.isFinite(parsed)) return null;
+
+    return parsed;
+  };
+
+  // Only require completion of the uploaded SESSION VIDEO(S) for this day.
+  // Previously this checked *all* uploaded videos in the DB, which would incorrectly block users.
+  const uploadedVideos = await SessionVideo.find({ status: "uploaded" });
+  const daySessionVideos = uploadedVideos.filter((v: any) => {
+    const title = typeof v?.title === "string" ? v.title.toLowerCase() : "";
+    const isSessionVideo = title.includes("session video");
+    if (!isSessionVideo) return false;
+
+    const parsedDay = extractDayNumberFromDescription(v?.description);
+    return parsedDay === dayNumber;
+  });
+
+  // If there are no session videos configured for this day, don't block the daily session submission.
+  if (daySessionVideos.length === 0) {
+    return true;
   }
-  
-  // Check if user has completed ALL videos for this day
-  const videoIds = allVideos.map(video => video._id.toString());
-  
-  // Get all tracking records for this user, day, and these videos
+
   const completionChecks = await Promise.all(
-    videoIds.map(async (videoId) => {
+    daySessionVideos.map(async (video: any) => {
+      const videoId = String(video._id);
       const tracking = (await findVideoWatchTracking(userId, dayNumber, videoId)) as unknown as IVideoWatchTrackingDocument | null;
       return tracking?.isCompleted === true;
     })
   );
-  
-  // Return true only if ALL videos are completed
-  return completionChecks.every(completed => completed === true);
+
+  return completionChecks.every((completed) => completed === true);
 };
 
 export const checkPreviousDayVideoCompleted = async (userId: string, currentDay: number): Promise<boolean> => {

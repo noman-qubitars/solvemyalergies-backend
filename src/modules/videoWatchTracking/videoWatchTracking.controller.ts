@@ -21,7 +21,7 @@ export const getStatus = async (req: AuthRequest, res: Response) => {
       return sendUserIdNotFoundError(res);
     }
 
-    const { dayNumber } = req.query;
+    const { dayNumber, videoId } = req.query;
 
     if (dayNumber === undefined || dayNumber === null) {
       return sendDayNumberRequiredError(res);
@@ -32,7 +32,11 @@ export const getStatus = async (req: AuthRequest, res: Response) => {
       return sendInvalidDayNumberError(res);
     }
 
-    const result = await getVideoWatchStatus(userId, dayNum);
+    const result = await getVideoWatchStatus(
+      userId,
+      dayNum,
+      typeof videoId === "string" ? videoId : undefined
+    );
 
     res.status(200).json({
       success: true,

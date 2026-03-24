@@ -5,7 +5,6 @@ import { s3Client, createS3Storage } from "./upload.s3";
 import { config } from "../../config/env";
 import { generateUniqueFilename } from "./upload.utils";
 
-// Use S3 storage only - local storage is not supported
 const quizImageStorage = createS3Storage("images");
 
 const quizImageFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
@@ -38,7 +37,6 @@ const quizFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFil
   cb(null, true);
 };
 
-// Use S3 storage only - local storage is not supported
 const quizStorage = multerS3({
   s3: s3Client!,
   bucket: config.s3.S3_BUCKET_NAME!,
@@ -80,7 +78,6 @@ const quizCombinedFilter = (_req: any, file: Express.Multer.File, cb: multer.Fil
   }
 };
 
-// Use S3 storage only - local storage is not supported
 const quizCombinedStorage = multerS3({
   s3: s3Client!,
   bucket: config.s3.S3_BUCKET_NAME!,

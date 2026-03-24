@@ -11,13 +11,23 @@ export const errorHandler = (
       ? err.statusCode
       : 500;
 
-  const message =
+  const isProduction = process.env.NODE_ENV === "production";
+
+  const rawMessage =
     typeof err?.message === "string" && err.message.trim() !== ""
       ? err.message
       : "Internal server error";
 
-  res.status(statusCode).json({
+  const message = statusCode >= 500 && isProduction ? "Internal server error" : rawMessage;
+
+  const payload: any = {
     success: false,
     message,
-  });
+  };
+
+  if (!isProduction && err?.stack) {
+    payload.stack = err.stack;
+  }
+
+  res.status(statusCode).json(payload);
 };
