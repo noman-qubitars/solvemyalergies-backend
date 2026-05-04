@@ -41,7 +41,10 @@ const questionsData = {
   "question_35": "I have significant allergies or reactions to the following foods:",
   "question_36": "I exercise:",
   "question_37": "With regards to taking pills:",
-  "question_38": "Soon you will receive your sessions calendar, with your personalized sessions available to you. Each session takes 3-15 mins, depending on if a few moments of exercise is included in that session. Would you rather work with your sessions:"
+  "question_38": "Soon you will receive your sessions calendar, with your personalized sessions available to you. Each session takes 3-15 mins, depending on if a few moments of exercise is included in that session. Would you rather work with your sessions:",
+  "question_39": "My workouts are:",
+  "question_40": "Please list all medications and supplements below:",
+  "question_41": "Would you like a reminder sent to your phone the same day if a session is missed?"
 };
 
 const determineQuestionType = (questionId: string, questionText: string): "single" | "multi" => {

@@ -7,6 +7,111 @@ export const getQuestionNumber = (questionId: string): number | null => {
   return match ? parseInt(match[1], 10) : null;
 };
 
+const TAIL_EXERCISE = "question_36";
+const TAIL_WORKOUT = "question_39";
+const TAIL_PILLS = "question_37";
+const TAIL_MEDS = "question_40";
+const TAIL_TIMING = "question_38";
+const TAIL_REMINDER = "question_41";
+
+const TAIL_IDS = new Set([
+  TAIL_EXERCISE,
+  TAIL_WORKOUT,
+  TAIL_PILLS,
+  TAIL_MEDS,
+  TAIL_TIMING,
+  TAIL_REMINDER,
+]);
+
+const tailAnswered = (
+  answers: Array<{ questionId: string }>,
+  id: string
+): boolean => answers.some((a) => a.questionId === id);
+
+const userExercisesFromAnswers = (
+  answers: Array<{ questionId: string; selectedOption?: unknown }>
+): boolean | null => {
+  const row = answers.find((a) => a.questionId === TAIL_EXERCISE);
+  if (!row || typeof row.selectedOption !== "string") return null;
+  return row.selectedOption.trim().toLowerCase() !== "never";
+};
+
+export const validateTailQuestionPrerequisites = (
+  questionId: string,
+  existingAnswers: Array<{ questionId: string; selectedOption?: unknown }>
+): { valid: boolean; message?: string } => {
+  if (!TAIL_IDS.has(questionId)) return { valid: true };
+
+  if (questionId === TAIL_EXERCISE) return { valid: true };
+
+  if (questionId === TAIL_WORKOUT) {
+    if (!tailAnswered(existingAnswers, TAIL_EXERCISE)) {
+      return {
+        valid: false,
+        message: `You must answer ${TAIL_EXERCISE} first before answering ${questionId}`,
+      };
+    }
+    if (userExercisesFromAnswers(existingAnswers) !== true) {
+      return {
+        valid: false,
+        message: "Workout details apply only when you exercise",
+      };
+    }
+    return { valid: true };
+  }
+
+  if (questionId === TAIL_PILLS) {
+    if (!tailAnswered(existingAnswers, TAIL_EXERCISE)) {
+      return {
+        valid: false,
+        message: `You must answer ${TAIL_EXERCISE} first before answering ${questionId}`,
+      };
+    }
+    if (
+      userExercisesFromAnswers(existingAnswers) === true &&
+      !tailAnswered(existingAnswers, TAIL_WORKOUT)
+    ) {
+      return {
+        valid: false,
+        message: `You must answer ${TAIL_WORKOUT} first before answering ${questionId}`,
+      };
+    }
+    return { valid: true };
+  }
+
+  if (questionId === TAIL_MEDS) {
+    if (!tailAnswered(existingAnswers, TAIL_PILLS)) {
+      return {
+        valid: false,
+        message: `You must answer ${TAIL_PILLS} first before answering ${questionId}`,
+      };
+    }
+    return { valid: true };
+  }
+
+  if (questionId === TAIL_TIMING) {
+    if (!tailAnswered(existingAnswers, TAIL_MEDS)) {
+      return {
+        valid: false,
+        message: `You must answer ${TAIL_MEDS} first before answering ${questionId}`,
+      };
+    }
+    return { valid: true };
+  }
+
+  if (questionId === TAIL_REMINDER) {
+    if (!tailAnswered(existingAnswers, TAIL_TIMING)) {
+      return {
+        valid: false,
+        message: `You must answer ${TAIL_TIMING} first before answering ${questionId}`,
+      };
+    }
+    return { valid: true };
+  }
+
+  return { valid: true };
+};
+
 export const validateSequentialQuestion = (
   questionId: string,
   existingAnswers: Array<{ questionId: string }>

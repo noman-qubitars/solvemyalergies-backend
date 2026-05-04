@@ -1,6 +1,10 @@
 import { Response } from "express";
 import mongoose from "mongoose";
-import { getQuestionNumber, validateSequentialQuestion } from "./quiz.controller.utils";
+import {
+  getQuestionNumber,
+  validateSequentialQuestion,
+  validateTailQuestionPrerequisites,
+} from "./quiz.controller.utils";
 
 export const validateUserId = (userId: string | undefined, res: Response): boolean => {
   if (!userId) {
@@ -53,9 +57,17 @@ export const validateFirstQuestion = (questionId: string, res: Response): boolea
 
 export const validateQuestionSequence = (
   questionId: string,
-  existingAnswers: Array<{ questionId: string }>,
+  existingAnswers: Array<{ questionId: string; selectedOption?: unknown }>,
   res: Response
 ): boolean => {
+  const tail = validateTailQuestionPrerequisites(questionId, existingAnswers);
+  if (!tail.valid && tail.message) {
+    res.status(400).json({
+      success: false,
+      message: tail.message,
+    });
+    return false;
+  }
   const validation = validateSequentialQuestion(questionId, existingAnswers);
   if (!validation.valid && validation.missingQuestion) {
     res.status(400).json({
