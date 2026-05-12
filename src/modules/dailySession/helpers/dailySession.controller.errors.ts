@@ -36,10 +36,17 @@ export const sendDateRequiredError = (res: Response) => {
   });
 };
 
-export const sendIncorrectAnswersCountError = (res: Response) => {
+export const sendIncorrectAnswersCountError = (
+  res: Response,
+  expectedCount?: number,
+  requiredQuestions?: string[]
+) => {
+  const message = requiredQuestions
+    ? `${expectedCount} answers required: ${requiredQuestions.join(", ")}`
+    : "All required questions must be answered";
   return res.status(400).json({
     success: false,
-    message: "All 6 questions (question_1 to question_6) are required",
+    message,
   });
 };
 

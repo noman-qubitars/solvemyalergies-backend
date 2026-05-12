@@ -47,12 +47,42 @@ export const isTodayDate = (date: Date): boolean => {
   return inputDateUTC.getTime() === todayUTC.getTime();
 };
 
+export const BASE_REQUIRED_QUESTIONS = ["question_1", "question_5", "question_6"];
+export const SYMPTOM_RATING_QUESTIONS = ["question_2", "question_3", "question_4"];
+export const ALL_RATING_QUESTIONS = ["question_2", "question_3", "question_4"];
+
+/**
+ * Determines required questions based on the number of symptoms the user selected
+ * during onboarding (question_2 in UserAnswer).
+ *
+ * 1 symptom  → question_1, question_2, question_5, question_6
+ * 2 symptoms → question_1, question_2, question_3, question_5, question_6
+ * 3 symptoms → question_1, question_2, question_3, question_4, question_5, question_6
+ */
+export const getRequiredQuestions = (symptomCount: number): string[] => {
+  const required = [...BASE_REQUIRED_QUESTIONS];
+  const symptomQuestions = SYMPTOM_RATING_QUESTIONS.slice(0, Math.max(1, Math.min(symptomCount, 3)));
+  return [...required, ...symptomQuestions].sort();
+};
+
+/**
+ * Gets the rating questions that apply for a given symptom count.
+ */
+export const getRatingQuestions = (symptomCount: number): string[] => {
+  return SYMPTOM_RATING_QUESTIONS.slice(0, Math.max(1, Math.min(symptomCount, 3)));
+};
+
+// Keep backward-compatible exports
 export const REQUIRED_QUESTIONS = ["question_1", "question_2", "question_3", "question_4", "question_5", "question_6"];
 export const RATING_QUESTIONS = ["question_2", "question_3", "question_4"];
 
-export const validateRequiredQuestions = (answers: Array<{ questionId: string }>): { valid: boolean; missing?: string[] } => {
+export const validateRequiredQuestions = (
+  answers: Array<{ questionId: string }>,
+  requiredQuestions?: string[]
+): { valid: boolean; missing?: string[] } => {
+  const required = requiredQuestions || REQUIRED_QUESTIONS;
   const providedQuestionIds = answers.map(a => a.questionId);
-  const missingQuestions = REQUIRED_QUESTIONS.filter(q => !providedQuestionIds.includes(q));
+  const missingQuestions = required.filter(q => !providedQuestionIds.includes(q));
   
   if (missingQuestions.length > 0) {
     return { valid: false, missing: missingQuestions };
@@ -61,7 +91,10 @@ export const validateRequiredQuestions = (answers: Array<{ questionId: string }>
   return { valid: true };
 };
 
-export const validateAnswer = (answer: { questionId?: string; answer?: any }): { valid: boolean; error?: string } => {
+export const validateAnswer = (
+  answer: { questionId?: string; answer?: any },
+  ratingQuestions?: string[]
+): { valid: boolean; error?: string } => {
   if (!answer.questionId) {
     return { valid: false, error: "Each answer must have a questionId" };
   }
@@ -70,7 +103,8 @@ export const validateAnswer = (answer: { questionId?: string; answer?: any }): {
     return { valid: false, error: `Answer for ${answer.questionId} is required` };
   }
 
-  if (RATING_QUESTIONS.includes(answer.questionId)) {
+  const ratings = ratingQuestions || RATING_QUESTIONS;
+  if (ratings.includes(answer.questionId)) {
     if (typeof answer.answer !== "number") {
       return { valid: false, error: `${answer.questionId} must be a number (rating type)` };
     }

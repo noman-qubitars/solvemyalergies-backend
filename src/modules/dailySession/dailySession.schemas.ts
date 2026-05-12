@@ -28,18 +28,8 @@ const answerSchema = z.object({
 export const createDailySessionSchema = z.object({
   day: daySchema,
   answers: z.array(answerSchema)
-    .min(6, "All 6 questions (question_1 to question_6) are required")
-    .max(6, "Only 6 questions (question_1 to question_6) are allowed")
-    .refine(
-      (answers) => {
-        const questionIds = answers.map(a => a.questionId);
-        const requiredQuestions = ["question_1", "question_2", "question_3", "question_4", "question_5", "question_6"];
-        return requiredQuestions.every(q => questionIds.includes(q));
-      },
-      {
-        message: "All questions from question_1 to question_6 must be provided",
-      }
-    ),
+    .min(4, "At least 4 answers are required (question_1, question_2, question_5, question_6)")
+    .max(6, "Maximum 6 answers are allowed"),
   feedback: z.string().optional(),
 });
 

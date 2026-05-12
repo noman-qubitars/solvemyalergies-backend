@@ -49,8 +49,26 @@ export const createSession = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Validate answers
-    const answersValidation = validateAnswers(answers, res);
+    // Determine how many symptoms the user selected during onboarding
+    let symptomCount = 3;
+    try {
+      const userAnswer = await UserAnswer.findOne({ userId });
+      if (userAnswer?.answers) {
+        const symptomsAnswer = userAnswer.answers.find(
+          (a: any) => a.questionId === "question_2"
+        );
+        if (symptomsAnswer?.selectedOption) {
+          symptomCount = Array.isArray(symptomsAnswer.selectedOption)
+            ? symptomsAnswer.selectedOption.length
+            : 1;
+        }
+      }
+    } catch {
+      // Fall back to requiring all 3 symptom questions if lookup fails
+    }
+
+    // Validate answers dynamically based on user's symptom count
+    const answersValidation = validateAnswers(answers, res, symptomCount);
     if (!answersValidation.valid) {
       return;
     }

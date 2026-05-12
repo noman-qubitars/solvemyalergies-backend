@@ -1,4 +1,9 @@
-import { validateRequiredQuestions, validateAnswer } from "./dailySession.controller.utils";
+import {
+  validateRequiredQuestions,
+  validateAnswer,
+  getRequiredQuestions,
+  getRatingQuestions,
+} from "./dailySession.controller.utils";
 import {
   sendDayRequiredError,
   sendInvalidDayError,
@@ -28,30 +33,41 @@ export const validateDay = (day: any): { valid: boolean; dayNumber?: number; err
 };
 
 /**
- * Validates answers array structure and content
+ * Validates answers array structure and content based on the user's symptom count.
+ * Users who selected fewer symptoms during onboarding will have fewer required rating questions.
  */
 export const validateAnswers = (
   answers: any,
-  res: Response
+  res: Response,
+  symptomCount: number = 3
 ): { valid: boolean; answers?: any[] } => {
   if (!answers || !Array.isArray(answers)) {
     sendAnswersNotArrayError(res);
     return { valid: false };
   }
 
-  if (answers.length !== 6) {
-    sendIncorrectAnswersCountError(res);
+  const requiredQuestions = getRequiredQuestions(symptomCount);
+  const expectedCount = requiredQuestions.length;
+
+  if (answers.length < expectedCount) {
+    sendIncorrectAnswersCountError(res, expectedCount, requiredQuestions);
     return { valid: false };
   }
 
-  const questionsValidation = validateRequiredQuestions(answers);
+  if (answers.length > 6) {
+    sendIncorrectAnswersCountError(res, expectedCount, requiredQuestions);
+    return { valid: false };
+  }
+
+  const questionsValidation = validateRequiredQuestions(answers, requiredQuestions);
   if (!questionsValidation.valid) {
     sendMissingQuestionsError(res, questionsValidation.missing!);
     return { valid: false };
   }
 
+  const ratingQuestions = getRatingQuestions(symptomCount);
   for (const answer of answers) {
-    const answerValidation = validateAnswer(answer);
+    const answerValidation = validateAnswer(answer, ratingQuestions);
     if (!answerValidation.valid) {
       if (answerValidation.error?.includes("questionId")) {
         sendQuestionIdRequiredError(res);
