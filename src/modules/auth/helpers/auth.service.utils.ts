@@ -16,12 +16,12 @@ export const SALT_ROUNDS = 10;
 export const OTP_LENGTH = 4;
 export const OTP_EXPIRATION_MINUTES = 5;
 
-export const createToken = (userId: string, role?: string): string => {
+export const createAccessToken = (userId: string, role?: string): string => {
   const payload: { sub: string; role?: string } = { sub: userId };
   if (role) {
     payload.role = role;
   }
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: "1d" });
+  return jwt.sign(payload, config.jwtSecret, { expiresIn: `${config.accessTokenExpiryMinutes}m` });
 };
 
 export const generateOtpCode = (): string => {

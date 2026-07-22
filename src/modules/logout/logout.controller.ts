@@ -24,7 +24,7 @@ export const logout = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const result = await logoutService(parsed.token, userId);
+    const result = await logoutService(parsed.token, userId, req.body?.refreshToken);
 
     return res.status(200).json(result);
   } catch (error: any) {

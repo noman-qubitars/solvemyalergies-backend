@@ -24,7 +24,7 @@ export const toggleFavorite = async (req: AuthRequest, res: Response) => {
       return sendUserIdNotFoundError(res);
     }
 
-    const { id: videoId } = req.params;
+    const videoId = req.params.id as string;
 
     const result = await toggleVideoFavorite(userId, videoId);
 

@@ -74,7 +74,7 @@ export const createVideo = async (req: AuthRequest, res: Response) => {
 
 export const updateVideo = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const existingVideo = await getSessionVideoById(id);
 
     if (!existingVideo) {
@@ -141,7 +141,7 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
 
 export const deleteVideo = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const video = await getSessionVideoById(id);
 
     if (!video) {

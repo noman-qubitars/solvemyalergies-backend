@@ -1,7 +1,23 @@
-node_modules
-# Keep environment variables out of version control
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Env
 .env
+.env.*
+!.env.example
 
-dist
+# Logs
+logs/
+*.log
+npm-debug.log*
 
-uploads
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/

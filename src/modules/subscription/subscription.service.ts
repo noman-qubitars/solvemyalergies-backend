@@ -12,7 +12,7 @@ import { sendSubscriptionEmail } from "../../services/mailService";
 import { getDefaultAvatarUrl } from "../../lib/upload/upload.avatar";
 
 const stripe = new Stripe(config.stripe.secretKey, {
-  apiVersion: "2025-12-15.clover",
+  apiVersion: "2025-12-15.clover" as Stripe.LatestApiVersion,
   typescript: true,
 });
 

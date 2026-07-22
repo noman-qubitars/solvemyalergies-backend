@@ -22,7 +22,7 @@ export const getUsers = async (_req: Request, res: Response) => {
 
 export const getUser = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const user = await getUserById(id);
     return res.status(200).json({
       success: true,
@@ -35,7 +35,7 @@ export const getUser = async (req: Request, res: Response) => {
 
 export const blockUser = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     
     const user = await getUserById(id);
     

@@ -88,7 +88,7 @@ export const getAllMessages = async (req: AuthRequest, res: Response) => {
 
 export const getUserMessages = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = extractUserId(req.params.userId, req.userId);
+    const userId = extractUserId(req.params.userId as string | undefined, req.userId);
 
     const userIdValidation = validateUserId(userId, res);
     if (!userIdValidation.valid) {
@@ -136,7 +136,7 @@ export const markAsRead = async (req: AuthRequest, res: Response) => {
 
 export const deleteMessageById = async (req: AuthRequest, res: Response) => {
   try {
-    const { messageId } = req.params;
+    const messageId = req.params.messageId as string;
     const userId = req.userId!;
     const isAdmin = await checkIsAdmin(userId, req.userRole);
 

@@ -6,6 +6,7 @@ import { stripeConfig } from "./stripe.env";
 import { appConfig } from "./app.env";
 import { emailConfig } from "./email.env";
 import { s3Config } from "./s3.env";
+import { googleConfig } from "./google.env";
 
 export const config = {
   ...serverConfig,
@@ -15,4 +16,5 @@ export const config = {
   app: appConfig,
   email: emailConfig,
   s3: s3Config,
+  google: googleConfig,
 };

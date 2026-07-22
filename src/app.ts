@@ -4,14 +4,26 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import morgan from "morgan";
 import path from "path";
+import mongoose from "mongoose";
 import { registerRoutes } from "./routes";
 import { errorHandler } from "./middleware/errorHandler";
+import { connectDB } from "./lib/mongoose";
 
 const app = express();
 
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
+
+// On Vercel, this file is imported directly as the serverless handler, so
+// server.ts's connectDB() call never runs. Ensure a connection exists before
+// handling any request (no-op once mongoose is connected or connecting).
+app.use(async (_req, _res, next) => {
+  if (mongoose.connection.readyState === 0) {
+    await connectDB();
+  }
+  next();
+});
 
 app.use(helmet());
 
@@ -87,3 +99,4 @@ app.use((_req, res) => {
 app.use(errorHandler);
 
 export { app };
+export default app;

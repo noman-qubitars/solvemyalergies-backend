@@ -99,7 +99,7 @@ export const getVideos = async (req: AuthRequest, res: Response) => {
 
 export const getVideoById = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const video = await getEducationalVideoById(id);
 
     if (!video) {
@@ -121,7 +121,7 @@ export const getVideoById = async (req: Request, res: Response) => {
 
 export const updateVideo = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { title, description, status } = req.body;
 
     const existingVideo = await getEducationalVideoById(id);
@@ -159,7 +159,7 @@ export const updateVideo = async (req: AuthRequest, res: Response) => {
 
 export const deleteVideo = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const video = await getEducationalVideoById(id);
 
     if (!video) {
@@ -254,7 +254,7 @@ export const completeUploadVideo = async (req: AuthRequest, res: Response) => {
 
 export const initiateUpdateUploadVideo = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { filename, mimetype, totalSize } = req.body;
 
     // Verify video exists
@@ -288,7 +288,7 @@ export const initiateUpdateUploadVideo = async (req: AuthRequest, res: Response)
 
 export const completeUpdateUploadVideo = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { uploadId, key, parts, title, description, status } = req.body;
 
     if (!uploadId || !key || !parts) {

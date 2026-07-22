@@ -5,6 +5,14 @@ export const signinSchema = z.object({
   password: z.string().min(1, "Password is required")
 });
 
+export const googleSignInSchema = z.object({
+  idToken: z.string().min(1, "idToken is required")
+});
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, "refreshToken is required")
+});
+
 export const forgotPasswordSchema = z.object({
   email: z.string().email("Please enter a valid email address").min(1, "Email is required")
 });

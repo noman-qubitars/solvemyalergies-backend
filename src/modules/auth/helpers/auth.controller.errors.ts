@@ -1,7 +1,7 @@
 import { Response } from "express";
 
 export const determineErrorStatus = (message: string): number => {
-  if (message === "Your password is incorrect" || message === "Invalid OTP code. Please check and try again") {
+  if (message === "Your password is incorrect" || message === "Invalid OTP code. Please check and try again" || message === "Invalid Google token" || message === "Google email is not verified") {
     return 401;
   }
   

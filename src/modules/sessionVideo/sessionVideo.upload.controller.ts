@@ -94,7 +94,7 @@ export const completeUploadVideo = async (req: AuthRequest, res: Response) => {
 
 export const initiateUpdateUploadVideo = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { filename, mimetype, totalSize } = req.body;
 
     // Verify video exists
@@ -134,7 +134,7 @@ export const initiateUpdateUploadVideo = async (req: AuthRequest, res: Response)
 
 export const completeUpdateUploadVideo = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { uploadId, key, parts, title, description, symptoms, status } =
       req.body;
 

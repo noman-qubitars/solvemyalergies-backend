@@ -1,11 +1,13 @@
 import bcrypt from "bcrypt";
-import { findUserByEmail, createUser, updateUserById } from "../../models/User";
+import crypto from "crypto";
+import { findUserByEmail, findUserById, createUser, updateUserById } from "../../models/User";
 import { findSubscriptionByEmail } from "../../models/Subscription";
 import { sendOtpEmail } from "../../services/mailService";
 import { createUserSession, endAllActiveSessions } from "../../models/UserSession";
+import { issueRefreshToken, findValidRefreshToken, revokeRefreshToken } from "../../models/RefreshToken";
 import { getDefaultAvatarUrl } from "../../lib/upload/upload.avatar";
 import {
-  createToken,
+  createAccessToken,
   generateOtpCode,
   createOtpRecord,
   getValidOtp,
@@ -15,6 +17,7 @@ import {
   SALT_ROUNDS,
 } from "./helpers/auth.service.utils";
 import { getUserOrSubscriptionUserId, createOrUpdateUserFromSubscription } from "./helpers/auth.service.helpers";
+import { verifyGoogleIdToken } from "./helpers/googleAuth.utils";
 
 export const signin = async (payload: { email: string; password: string }) => {
   const user = await findUserByEmail(payload.email);
@@ -66,10 +69,12 @@ export const signin = async (payload: { email: string; password: string }) => {
     const userId = createdUser._id.toString();
     await endAllActiveSessions(userId);
     await createUserSession(userId);
-    
-    return { 
+    const { rawToken: refreshToken } = await issueRefreshToken(userId);
+
+    return {
       success: true,
-      token: createToken(userId, "user"), 
+      token: createAccessToken(userId, "user"),
+      refreshToken,
       userId: userId,
       email: payload.email,
       name: userName,
@@ -77,7 +82,7 @@ export const signin = async (payload: { email: string; password: string }) => {
       role: "user"
     };
   }
-  
+
   const isValid = await bcrypt.compare(payload.password, user.password);
   if (!isValid) {
     throw new Error("Your password is incorrect");
@@ -93,15 +98,127 @@ export const signin = async (payload: { email: string; password: string }) => {
   
   await endAllActiveSessions(userId);
   await createUserSession(userId);
-  
-  return { 
+  const { rawToken: refreshToken } = await issueRefreshToken(userId);
+
+  return {
     success: true,
-    token: createToken(userId, userRole), 
+    token: createAccessToken(userId, userRole),
+    refreshToken,
     userId: userId,
     email: payload.email,
     name: userName,
     image: userImage,
     role: userRole
+  };
+};
+
+export const googleSignIn = async (idToken: string) => {
+  const profile = await verifyGoogleIdToken(idToken);
+  const user = await findUserByEmail(profile.email);
+
+  if (user && (user.status === "Blocked" || user.status === "inactive")) {
+    throw new Error(user.status === "inactive"
+      ? "Your account is not verified. Please complete your subscription to activate your account"
+      : "Your account has been blocked. Please contact support");
+  }
+
+  if (!user) {
+    const subscription = await findSubscriptionByEmail(profile.email);
+
+    if (!subscription) {
+      throw new Error("Your email is incorrect");
+    }
+
+    const randomPassword = crypto.randomBytes(32).toString("hex");
+    const hashedPassword = await bcrypt.hash(randomPassword, SALT_ROUNDS);
+    const userName =
+      profile.name ||
+      `${subscription.firstName} ${subscription.lastName}`.trim() ||
+      profile.email.split("@")[0];
+    const userImage = profile.picture || (await getDefaultAvatarUrl());
+
+    const createdUser = await createUser({
+      email: profile.email,
+      password: hashedPassword,
+      name: userName,
+      image: userImage,
+      status: "Active",
+      activity: new Date(),
+      role: "user",
+    });
+
+    const userId = createdUser._id.toString();
+    await endAllActiveSessions(userId);
+    await createUserSession(userId);
+    const { rawToken: refreshToken } = await issueRefreshToken(userId);
+
+    return {
+      success: true,
+      token: createAccessToken(userId, "user"),
+      refreshToken,
+      userId: userId,
+      email: profile.email,
+      name: userName,
+      image: createdUser.image,
+      role: "user",
+    };
+  }
+
+  user.activity = new Date();
+  await user.save();
+
+  const userId = user._id.toString();
+  const userRole = user.role || "user";
+  const userName = user.name || profile.name || profile.email.split("@")[0];
+  const userImage = user.image || profile.picture || (await getDefaultAvatarUrl());
+
+  await endAllActiveSessions(userId);
+  await createUserSession(userId);
+  const { rawToken: refreshToken } = await issueRefreshToken(userId);
+
+  return {
+    success: true,
+    token: createAccessToken(userId, userRole),
+    refreshToken,
+    userId: userId,
+    email: profile.email,
+    name: userName,
+    image: userImage,
+    role: userRole,
+  };
+};
+
+export const refreshAccessToken = async (refreshTokenValue: string) => {
+  const tokenRecord = await findValidRefreshToken(refreshTokenValue);
+
+  if (!tokenRecord) {
+    throw new Error("Session expired. Please sign in again");
+  }
+
+  const user = await findUserById(tokenRecord.userId);
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  if (user.status === "Blocked" || user.status === "inactive") {
+    throw new Error(user.status === "inactive"
+      ? "Your account is not verified. Please complete your subscription to activate your account"
+      : "Your account has been blocked. Please contact support");
+  }
+
+  const userId = user._id.toString();
+  const userRole = user.role || "user";
+
+  await revokeRefreshToken(refreshTokenValue);
+  const { rawToken: newRefreshToken } = await issueRefreshToken(userId);
+
+  return {
+    success: true,
+    token: createAccessToken(userId, userRole),
+    refreshToken: newRefreshToken,
+    userId,
+    role: userRole,
   };
 };
 
