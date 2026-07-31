@@ -108,7 +108,12 @@ export const trackVideoWatch = async (data: UpdateProgressData) => {
   // Also allow completion if they watched ≥95% and are near the end (within 1 second of duration)
   const effectiveHasSkippedForward = shouldResetSkipFlag ? false : (tracking.hasSkippedForward || hasSkippedForward);
   const isNearEnd = videoDurationValue > 0 && (videoDurationValue - newMaxWatchedPosition) <= 1;
-  const isCompleted = watchProgress >= COMPLETION_THRESHOLD && (!effectiveHasSkippedForward || isNearEnd);
+  // Only forgive a near-end "skip" if the user had already legitimately watched most of the
+  // video before this update — not if a single update jumps straight from the start to the end
+  // (e.g. a seekbar drag or a spurious position report), which would falsely mark it completed.
+  const previousWatchProgress = videoDurationValue > 0 ? (maxWatched / videoDurationValue) * 100 : 0;
+  const isLegitimateNearEndSkip = isNearEnd && previousWatchProgress >= COMPLETION_THRESHOLD - 15;
+  const isCompleted = watchProgress >= COMPLETION_THRESHOLD && (!effectiveHasSkippedForward || isLegitimateNearEndSkip);
 
   const updateData: any = {
     watchProgress,
@@ -174,14 +179,14 @@ export const checkVideoCompletedForDay = async (userId: string, dayNumber: numbe
     return parsed;
   };
 
-  // Only require completion of the uploaded SESSION VIDEO(S) for this day.
-  // Previously this checked *all* uploaded videos in the DB, which would incorrectly block users.
+  // Require completion of EVERY uploaded video for this day — regardless of its title
+  // ("session video", "exercise video", or anything else). Matching is purely by the day
+  // number parsed from the video's description, so this stays correct even if new video
+  // titles/naming conventions are added later.
+  // (Previously this only checked videos titled "session video", so an unwatched "exercise
+  // video" for the same day did not block the next day's daily-session submission.)
   const uploadedVideos = await SessionVideo.find({ status: "uploaded" });
   const daySessionVideos = uploadedVideos.filter((v: any) => {
-    const title = typeof v?.title === "string" ? v.title.toLowerCase() : "";
-    const isSessionVideo = title.includes("session video");
-    if (!isSessionVideo) return false;
-
     const parsedDay = extractDayNumberFromDescription(v?.description);
     return parsedDay === dayNumber;
   });
