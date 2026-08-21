@@ -3,6 +3,8 @@ import { AuthRequest } from "../../middleware/auth";
 import {
   trackVideoWatch,
   getVideoWatchStatus,
+  syncVideoWatchTracking,
+  SyncProgressEvent,
 } from "./videoWatchTracking.service";
 import {
   sendUserIdNotFoundError,
@@ -11,6 +13,7 @@ import {
   sendInvalidDayNumberError,
   sendPositionRequiredError,
   sendDurationRequiredError,
+  sendEventsRequiredError,
   handleVideoWatchError,
 } from "./helpers/videoWatchTracking.controller.errors";
 
@@ -92,5 +95,42 @@ export const trackVideo = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     return handleVideoWatchError(res, error, "Failed to track video watch");
+  }
+};
+
+// Accepts progress events collected while offline and replays them in order once the
+// device is back online. Each event carries its own clientTimestamp so the server can
+// reconstruct the correct chronology instead of trusting arrival order.
+export const syncVideoTracking = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      return sendUserIdNotFoundError(res);
+    }
+
+    const { events } = req.body;
+
+    if (!Array.isArray(events) || events.length === 0) {
+      return sendEventsRequiredError(res);
+    }
+
+    const normalizedEvents: SyncProgressEvent[] = events.map((event: any) => ({
+      videoId: event.videoId,
+      dayNumber: Number(event.dayNumber),
+      currentPosition: Number(event.currentPosition),
+      videoDuration: Number(event.videoDuration),
+      clientTimestamp: event.clientTimestamp,
+      clientEventId: event.clientEventId,
+    }));
+
+    const results = await syncVideoWatchTracking(userId, normalizedEvents);
+
+    res.status(200).json({
+      success: true,
+      message: "Offline video watch events synced",
+      data: results,
+    });
+  } catch (error) {
+    return handleVideoWatchError(res, error, "Failed to sync video watch events");
   }
 };

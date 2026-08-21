@@ -42,6 +42,13 @@ export const sendDurationRequiredError = (res: Response) => {
   });
 };
 
+export const sendEventsRequiredError = (res: Response) => {
+  return res.status(400).json({
+    success: false,
+    message: "Events array is required and cannot be empty",
+  });
+};
+
 export const handleVideoWatchError = (res: Response, error: unknown, defaultMessage: string) => {
   const message = error instanceof Error ? error.message : defaultMessage;
   return res.status(400).json({

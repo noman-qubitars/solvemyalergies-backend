@@ -4,7 +4,7 @@ import { findUserByEmail, findUserById, createUser, updateUserById } from "../..
 import { findSubscriptionByEmail } from "../../models/Subscription";
 import { sendOtpEmail } from "../../services/mailService";
 import { createUserSession, endAllActiveSessions } from "../../models/UserSession";
-import { issueRefreshToken, findValidRefreshToken, revokeRefreshToken } from "../../models/RefreshToken";
+import { issueRefreshToken, findValidRefreshToken, revokeRefreshToken, revokeAllRefreshTokensForUser } from "../../models/RefreshToken";
 import { getDefaultAvatarUrl } from "../../lib/upload/upload.avatar";
 import {
   createAccessToken,
@@ -69,6 +69,7 @@ export const signin = async (payload: { email: string; password: string }) => {
     const userId = createdUser._id.toString();
     await endAllActiveSessions(userId);
     await createUserSession(userId);
+    await revokeAllRefreshTokensForUser(userId);
     const { rawToken: refreshToken } = await issueRefreshToken(userId);
 
     return {
@@ -98,6 +99,7 @@ export const signin = async (payload: { email: string; password: string }) => {
   
   await endAllActiveSessions(userId);
   await createUserSession(userId);
+  await revokeAllRefreshTokensForUser(userId);
   const { rawToken: refreshToken } = await issueRefreshToken(userId);
 
   return {
@@ -150,6 +152,7 @@ export const googleSignIn = async (idToken: string) => {
     const userId = createdUser._id.toString();
     await endAllActiveSessions(userId);
     await createUserSession(userId);
+    await revokeAllRefreshTokensForUser(userId);
     const { rawToken: refreshToken } = await issueRefreshToken(userId);
 
     return {
@@ -174,6 +177,7 @@ export const googleSignIn = async (idToken: string) => {
 
   await endAllActiveSessions(userId);
   await createUserSession(userId);
+  await revokeAllRefreshTokensForUser(userId);
   const { rawToken: refreshToken } = await issueRefreshToken(userId);
 
   return {

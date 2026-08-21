@@ -15,11 +15,26 @@ export interface UpdateProgressData {
   userId: string;
   videoId: string;
   dayNumber: number;
-  currentPosition: number; 
-  videoDuration: number; 
+  currentPosition: number;
+  videoDuration: number;
 }
 
-export const trackVideoWatch = async (data: UpdateProgressData) => {
+export interface SyncProgressEvent {
+  videoId: string;
+  dayNumber: number;
+  currentPosition: number;
+  videoDuration: number;
+  clientTimestamp: string | Date;
+  clientEventId?: string;
+}
+
+// Shared by the live /track call (eventTime = now) and offline /sync replay (eventTime =
+// each event's own clientTimestamp). Keeping this in one place means offline-synced events
+// go through the exact same skip-detection/completion rules as live ones.
+const applyProgressUpdate = async (
+  data: UpdateProgressData,
+  eventTime: Date
+): Promise<{ tracking: IVideoWatchTrackingDocument; applied: boolean }> => {
   const { userId, videoId, dayNumber, currentPosition, videoDuration } = data;
 
   // Verify video exists
@@ -30,7 +45,7 @@ export const trackVideoWatch = async (data: UpdateProgressData) => {
 
   // Check if tracking exists, if not create it
   let tracking = (await findVideoWatchTracking(userId, dayNumber, videoId)) as unknown as IVideoWatchTrackingDocument | null;
-  
+
   if (!tracking) {
     // Create new tracking
     tracking = (await createVideoWatchTracking({
@@ -43,6 +58,13 @@ export const trackVideoWatch = async (data: UpdateProgressData) => {
 
   if (!tracking) {
     throw new Error("Failed to create or retrieve video tracking");
+  }
+
+  // An offline event whose own timestamp is older than the last recorded update means a
+  // newer state was already saved (e.g. from a later online session) — skip it so a
+  // delayed sync can't roll back progress that has since moved forward.
+  if (tracking.updatedAt && eventTime.getTime() < new Date(tracking.updatedAt).getTime()) {
+    return { tracking, applied: false };
   }
 
   // Update video duration if not set or if it changed (use the larger/more accurate value)
@@ -75,10 +97,9 @@ export const trackVideoWatch = async (data: UpdateProgressData) => {
   // against real time elapsed since the last update.
   const previousPosition = tracking.lastPosition || 0;
   const positionDiff = currentPosition - previousPosition;
-  const now = new Date();
   const previousUpdatedAt = tracking.updatedAt ? new Date(tracking.updatedAt) : null;
   const secondsSinceLastUpdate = previousUpdatedAt
-    ? Math.max(0, (now.getTime() - previousUpdatedAt.getTime()) / 1000)
+    ? Math.max(0, (eventTime.getTime() - previousUpdatedAt.getTime()) / 1000)
     : 0;
 
   // Allow a small grace to account for player buffering / timer drift.
@@ -124,11 +145,11 @@ export const trackVideoWatch = async (data: UpdateProgressData) => {
     hasSkippedForward: effectiveHasSkippedForward,
     isCompleted: isCompleted || tracking.isCompleted, // Use new completion status or keep existing
     // keep updatedAt accurate (findOneAndUpdate does not run schema pre-save hooks)
-    updatedAt: now,
+    updatedAt: eventTime,
   };
 
   if (isCompleted && !tracking.isCompleted) {
-    updateData.completedAt = new Date();
+    updateData.completedAt = eventTime;
   }
 
   const updated = await updateVideoWatchProgress(userId, dayNumber, videoId, updateData);
@@ -137,11 +158,81 @@ export const trackVideoWatch = async (data: UpdateProgressData) => {
     throw new Error("Failed to update video watch progress");
   }
 
+  return { tracking: updated, applied: true };
+};
+
+export const trackVideoWatch = async (data: UpdateProgressData) => {
+  const { tracking } = await applyProgressUpdate(data, new Date());
+
   return {
-    ...updated.toObject(),
+    ...tracking.toObject(),
     canProceed: true,
-    maxWatchedPosition: newMaxWatchedPosition,
+    maxWatchedPosition: tracking.maxWatchedPosition,
   };
+};
+
+export interface SyncEventResult {
+  clientEventId?: string;
+  videoId: string;
+  dayNumber: number;
+  success: boolean;
+  applied?: boolean;
+  message?: string;
+}
+
+// Replays offline-collected events in chronological order (per video/day) so the same
+// skip-detection and completion rules that apply live also apply to backfilled progress.
+export const syncVideoWatchTracking = async (
+  userId: string,
+  events: SyncProgressEvent[]
+): Promise<SyncEventResult[]> => {
+  const groups = new Map<string, SyncProgressEvent[]>();
+  for (const event of events) {
+    const key = `${event.dayNumber}:${event.videoId}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key)!.push(event);
+  }
+
+  const results: SyncEventResult[] = [];
+
+  for (const group of groups.values()) {
+    group.sort((a, b) => new Date(a.clientTimestamp).getTime() - new Date(b.clientTimestamp).getTime());
+
+    for (const event of group) {
+      try {
+        const { applied } = await applyProgressUpdate(
+          {
+            userId,
+            videoId: event.videoId,
+            dayNumber: event.dayNumber,
+            currentPosition: event.currentPosition,
+            videoDuration: event.videoDuration,
+          },
+          new Date(event.clientTimestamp)
+        );
+
+        results.push({
+          clientEventId: event.clientEventId,
+          videoId: event.videoId,
+          dayNumber: event.dayNumber,
+          success: true,
+          applied,
+        });
+      } catch (error) {
+        results.push({
+          clientEventId: event.clientEventId,
+          videoId: event.videoId,
+          dayNumber: event.dayNumber,
+          success: false,
+          message: error instanceof Error ? error.message : "Failed to sync event",
+        });
+      }
+    }
+  }
+
+  return results;
 };
 
 
