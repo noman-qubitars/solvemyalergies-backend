@@ -1,5 +1,17 @@
 export const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
-export const ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/wav", "audio/mp3", "audio/ogg", "audio/webm"];
+export const ALLOWED_AUDIO_TYPES = [
+  "audio/mpeg",
+  "audio/wav",
+  "audio/mp3",
+  "audio/ogg",
+  "audio/webm",
+  "audio/m4a",
+  "audio/x-m4a",
+  "audio/aac",
+  "audio/mp4",
+  "audio/x-wav",
+  "audio/3gpp",
+];
 export const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/mpeg", "video/quicktime", "video/x-msvideo"];
 export const ALLOWED_DOC_TYPES = [
   "application/pdf",

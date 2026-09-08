@@ -13,6 +13,7 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
   ) {
     cb(null, true);
   } else {
+    console.log(`[upload] Rejected file - originalname: ${file.originalname}, mimetype: ${file.mimetype}`);
     cb(new Error("Invalid file type. Allowed: images (png, jpg, jpeg, webp), audio files, videos (mp4, mpeg, mov, avi), PDFs, and documents"));
   }
 };
