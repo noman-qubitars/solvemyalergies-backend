@@ -15,6 +15,17 @@ export const emitNewMessage = (messageData: any, targetUserId: string, senderUse
 };
 
 /**
+ * Emits single message deleted notification via socket
+ */
+export const emitMessageDeleted = (messageId: string, targetUserId: string) => {
+  const io = getSocketInstance();
+  if (io) {
+    io.to(`user:${targetUserId}`).emit("message_deleted", { messageId });
+    io.to("admins").emit("message_deleted", { messageId });
+  }
+};
+
+/**
  * Emits chat deleted notification via socket
  */
 export const emitChatDeleted = (targetUserId: string) => {

@@ -10,7 +10,7 @@ import {
 import { AuthRequest } from "../../middleware/auth";
 import { validateMessageType, validateFileForMessage, validateMessageIds, validateUserId, validateMessageId } from "./helpers/messageValidation.helpers";
 import { extractFileInfo } from "./helpers/fileProcessing.helpers";
-import { emitNewMessage, emitChatDeleted } from "./helpers/socketNotification.helpers";
+import { emitNewMessage, emitChatDeleted, emitMessageDeleted } from "./helpers/socketNotification.helpers";
 import { checkIsAdmin, getTargetUserId, buildGetMessagesParams, extractUserId } from "./helpers/requestParsing.helpers";
 
 // ============================================================================
@@ -146,6 +146,7 @@ export const deleteMessageById = async (req: AuthRequest, res: Response) => {
     }
 
     const result = await deleteMessage(messageId, isAdmin ? undefined : userId);
+    emitMessageDeleted(result.messageId, result.userId);
     res.status(200).json(result);
   } catch (error: any) {
     res.status(400).json({

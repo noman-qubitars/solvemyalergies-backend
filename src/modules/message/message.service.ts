@@ -128,6 +128,8 @@ export const deleteMessage = async (messageId: string, userId?: string) => {
   return {
     success: true,
     message: "Message deleted successfully",
+    messageId,
+    userId: message.userId.toString(),
   };
 };
 
