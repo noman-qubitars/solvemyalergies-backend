@@ -15,11 +15,9 @@ export const createRewardTransaction = async (data: {
   event: string;
   starsEarned?: number;
   starsRedeemed?: number;
-  starsTransferred?: number;
   balanceAfter: number;
   weekNumber?: number;
   relatedEmail?: string;
-  relatedUserId?: string;
 }) => {
   return await RewardTransactionModel.create(data);
 };

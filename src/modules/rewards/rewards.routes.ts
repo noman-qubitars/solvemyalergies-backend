@@ -3,7 +3,6 @@ import {
   getBalance,
   getAchievements,
   sendReferralReward,
-  transferReward,
   redeemReward,
   getRewardsAdminList,
   getRewardsAdminUserDetail,
@@ -12,7 +11,7 @@ import {
 } from "./rewards.controller";
 import { authenticate, requireRole } from "../../middleware/auth";
 import { validate } from "../../lib/validation/validateRequest";
-import { referralSchema, transferSchema, redeemSchema, updateRewardSettingsSchema } from "./rewards.schemas";
+import { referralSchema, redeemSchema, updateRewardSettingsSchema } from "./rewards.schemas";
 
 const rewardsRouter = Router();
 
@@ -20,7 +19,6 @@ const rewardsRouter = Router();
 rewardsRouter.get("/balance", authenticate, getBalance);
 rewardsRouter.get("/achievements", authenticate, getAchievements);
 rewardsRouter.post("/referral", authenticate, validate(referralSchema), sendReferralReward);
-rewardsRouter.post("/transfer", authenticate, validate(transferSchema), transferReward);
 rewardsRouter.post("/redeem", authenticate, validate(redeemSchema), redeemReward);
 
 // Admin portal routes

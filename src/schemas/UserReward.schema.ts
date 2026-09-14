@@ -5,7 +5,6 @@ export interface IUserReward {
   currentBalance: number;
   totalEarned: number;
   totalRedeemed: number;
-  totalTransferred: number;
   totalReferred: number;
   completedWeeks: number[];
   createdAt: Date;
@@ -18,7 +17,6 @@ export const UserRewardSchema = new Schema(
     currentBalance: { type: Number, required: true, default: 0 },
     totalEarned: { type: Number, required: true, default: 0 },
     totalRedeemed: { type: Number, required: true, default: 0 },
-    totalTransferred: { type: Number, required: true, default: 0 },
     totalReferred: { type: Number, required: true, default: 0 },
     completedWeeks: { type: [Number], default: [] },
   },

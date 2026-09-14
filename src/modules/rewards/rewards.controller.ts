@@ -4,7 +4,6 @@ import {
   getUserRewardBalance,
   getUserAchievements,
   sendReferral,
-  transferStars,
   redeemStars,
   getAdminRewardsList,
   getAdminUserRewardDetail,
@@ -47,19 +46,6 @@ export const sendReferralReward = async (req: AuthRequest, res: Response) => {
     res.status(200).json(result);
   } catch (error) {
     return handleRewardsError(res, error, "Failed to send referral");
-  }
-};
-
-export const transferReward = async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId;
-    if (!userId) return sendUserIdNotFoundError(res);
-
-    const { recipientEmail, stars } = req.body;
-    const result = await transferStars(userId, recipientEmail, stars);
-    res.status(200).json(result);
-  } catch (error) {
-    return handleRewardsError(res, error, "Failed to transfer stars");
   }
 };
 

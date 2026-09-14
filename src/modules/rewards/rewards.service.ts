@@ -1,7 +1,7 @@
 import { getOrCreateUserReward, UserReward, findAllUserRewards } from "../../models/UserReward";
 import { createRewardTransaction, findRewardTransactionsByUser } from "../../models/RewardTransaction";
 import { getOrCreateRewardSettings } from "../../models/RewardSettings";
-import { findUserByEmail, findUserById, findAllUsers } from "../../models/User";
+import { findUserById, findAllUsers } from "../../models/User";
 import { sendReferralEmail } from "../../services/mailService";
 import { WEEKLY_STAR_VALUES, TOTAL_WEEKS } from "./rewards.constants";
 
@@ -86,60 +86,6 @@ export const sendReferral = async (userId: string, recipientEmail: string, stars
   return { success: true, message: "Referral sent successfully" };
 };
 
-export const transferStars = async (userId: string, recipientEmail: string, stars: number) => {
-  const recipient = await findUserByEmail(recipientEmail);
-  if (!recipient) {
-    throw new Error("Recipient not found. They must have an account to receive transferred stars");
-  }
-
-  const recipientId = recipient._id.toString();
-  if (recipientId === userId) {
-    throw new Error("You cannot transfer stars to yourself");
-  }
-
-  const senderReward = await getOrCreateUserReward(userId);
-  if (senderReward.currentBalance < stars) {
-    throw new Error("Insufficient stars balance");
-  }
-
-  const updatedSender = await UserReward.findOneAndUpdate(
-    { userId, currentBalance: { $gte: stars } },
-    { $inc: { currentBalance: -stars, totalTransferred: stars } },
-    { new: true }
-  );
-
-  if (!updatedSender) {
-    throw new Error("Insufficient stars balance");
-  }
-
-  await createRewardTransaction({
-    userId,
-    event: "transfer_sent",
-    starsTransferred: stars,
-    balanceAfter: updatedSender.currentBalance,
-    relatedEmail: recipientEmail,
-    relatedUserId: recipientId,
-  });
-
-  await getOrCreateUserReward(recipientId);
-  const updatedRecipient = await UserReward.findOneAndUpdate(
-    { userId: recipientId },
-    { $inc: { currentBalance: stars, totalEarned: stars } },
-    { new: true }
-  );
-
-  await createRewardTransaction({
-    userId: recipientId,
-    event: "transfer_received",
-    starsEarned: stars,
-    balanceAfter: updatedRecipient!.currentBalance,
-    relatedEmail: recipient.email,
-    relatedUserId: userId,
-  });
-
-  return { success: true, message: "Stars transferred successfully", currentBalance: updatedSender.currentBalance };
-};
-
 export const redeemStars = async (userId: string, stars: number) => {
   const settings = await getOrCreateRewardSettings();
 
@@ -206,7 +152,7 @@ export const getAdminRewardsList = async (search: string | undefined, page: numb
       userName: user?.name || "Unknown",
       starsEarned: reward.totalEarned,
       starsRedeemed: reward.totalRedeemed,
-      starsShared: reward.totalTransferred,
+      starsShared: reward.totalReferred,
       currentBalance: reward.currentBalance,
     };
   });
@@ -239,7 +185,7 @@ export const getAdminUserRewardDetail = async (userId: string) => {
     currentBalance: userReward.currentBalance,
     totalEarned: userReward.totalEarned,
     totalRedeemed: userReward.totalRedeemed,
-    totalTransferred: userReward.totalTransferred,
+    totalReferred: userReward.totalReferred,
     starBreakdown: transactions,
   };
 };

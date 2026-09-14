@@ -6,11 +6,6 @@ export const referralSchema = z.object({
   stars: z.number().int().positive().max(MAX_REFERRAL_STARS, `You can send a maximum of ${MAX_REFERRAL_STARS} stars via referral`),
 });
 
-export const transferSchema = z.object({
-  recipientEmail: z.string().email("A valid recipient email is required"),
-  stars: z.number().int().positive(),
-});
-
 export const redeemSchema = z.object({
   stars: z.number().int().positive(),
 });
