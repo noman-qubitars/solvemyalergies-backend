@@ -13,7 +13,6 @@ import { logoutRouter } from "../modules/logout/logout.routes";
 import { videoWatchTrackingRouter } from "../modules/videoWatchTracking/videoWatchTracking.routes";
 import { supportRouter } from "../modules/support/support.routes";
 import { rewardsRouter } from "../modules/rewards/rewards.routes";
-import { activePlansRouter } from "../modules/activePlans/activePlans.routes";
 
 export const registerRoutes = (app: Express) => {
   app.use("/api/v1/auth", authRouter);
@@ -30,5 +29,4 @@ export const registerRoutes = (app: Express) => {
   app.use("/api/v1/video-watch", videoWatchTrackingRouter);
   app.use("/api/v1/support", supportRouter);
   app.use("/api/v1/rewards", rewardsRouter);
-  app.use("/api/v1/active-plans", activePlansRouter);
 };
