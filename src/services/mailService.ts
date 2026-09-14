@@ -125,6 +125,65 @@ export const sendSubscriptionEmail = async (
   }
 };
 
+export const sendReferralEmail = async (
+  recipientEmail: string,
+  senderName: string,
+  stars: number
+) => {
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Poppins', Arial, sans-serif; color: #222222; margin: 0; padding: 20px; background-color: #f8f8f8; }
+        .container { max-width: 500px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; }
+        .header { background: linear-gradient(to right, #11401c, #1f7332, #859b5b); color: white; padding: 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 700; color: white; }
+        .content { padding: 30px; }
+        .stars-box { background: #f2fff6; border: 2px solid #11401c; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center; }
+        .stars-count { font-size: 32px; font-weight: 700; color: #11401c; margin: 10px 0; }
+        .message { color: #484c52; font-size: 14px; line-height: 1.6; margin: 15px 0; }
+        .button { display: inline-block; padding: 12px 24px; background: #11401c; color: white; text-decoration: none; border-radius: 6px; margin: 10px 5px; }
+        .footer { background: #f8f8f8; padding: 15px; text-align: center; color: #717171; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>SolveMyAllergies</h1>
+        </div>
+        <div class="content">
+          <p class="message"><strong>${senderName}</strong> has shared reward stars with you on SolveMyAllergies!</p>
+          <div class="stars-box">
+            <div class="stars-count">${stars} Stars</div>
+          </div>
+          <p class="message">Download the app to claim your stars and use them as a discount.</p>
+          <a href="${config.app.playStoreUrl}" class="button" style="color: white;">Download on Play Store</a>
+          <a href="${config.app.appStoreUrl}" class="button" style="color: white;">Download on App Store</a>
+          <p class="message">Best regards,<br><strong>SolveMyAllergies Team</strong></p>
+        </div>
+        <div class="footer">
+          <p>© SolveMyAllergies</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: config.email.from,
+      to: recipientEmail,
+      subject: `${senderName} sent you ${stars} reward stars on SolveMyAllergies`,
+      html: htmlContent,
+      text: `${senderName} has shared ${stars} reward stars with you on SolveMyAllergies. Download the app to claim them.`,
+    });
+  } catch (error: any) {
+    console.error("Error sending referral email:", error);
+    throw new Error(`Failed to send email: ${error.message}`);
+  }
+};
+
 export const sendFeedbackEmail = async (
   fullName: string,
   userEmail: string,

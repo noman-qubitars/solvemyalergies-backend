@@ -7,9 +7,33 @@ import {
   IVideoWatchTrackingDocument,
 } from "../../models/VideoWatchTracking";
 import { SessionVideo } from "../../models/SessionVideo";
+import { awardWeeklyStars } from "../rewards/rewards.service";
+import { DAYS_PER_WEEK, TOTAL_WEEKS } from "../rewards/rewards.constants";
 
 const SKIP_THRESHOLD = 5; // If user jumps more than 5 seconds forward, it's considered skipping
 const COMPLETION_THRESHOLD = 95; // Video is considered complete if watched >= 95%
+
+// Awards the week's reward stars once every day in that week has its videos completed.
+// awardWeeklyStars is itself idempotent (atomic "not already awarded" update), so calling
+// this on every newly-completed video is safe even if multiple videos finish the same week.
+const maybeAwardWeeklyStars = async (userId: string, dayNumber: number): Promise<void> => {
+  const weekNumber = Math.ceil(dayNumber / DAYS_PER_WEEK);
+  if (weekNumber < 1 || weekNumber > TOTAL_WEEKS) {
+    return;
+  }
+
+  const weekStartDay = (weekNumber - 1) * DAYS_PER_WEEK + 1;
+  const weekEndDay = weekNumber * DAYS_PER_WEEK;
+
+  for (let day = weekStartDay; day <= weekEndDay; day++) {
+    const completed = await checkVideoCompletedForDay(userId, day);
+    if (!completed) {
+      return;
+    }
+  }
+
+  await awardWeeklyStars(userId, weekNumber);
+};
 
 export interface UpdateProgressData {
   userId: string;
@@ -156,6 +180,12 @@ const applyProgressUpdate = async (
 
   if (!updated) {
     throw new Error("Failed to update video watch progress");
+  }
+
+  if (isCompleted && !tracking.isCompleted) {
+    maybeAwardWeeklyStars(userId, dayNumber).catch((err) => {
+      console.error("Failed to award weekly reward stars:", err);
+    });
   }
 
   return { tracking: updated, applied: true };
